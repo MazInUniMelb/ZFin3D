@@ -1,0 +1,30 @@
+#pragma kernel CSMain
+#define THREADS_X 256
+
+// Input binary data (1 or 0 for each neuron)
+StructuredBuffer<int> binaryData;
+
+// Output colors for neurons
+RWStructuredBuffer<float4> neuronColors;
+
+// Parameters
+int numNeurons;
+
+[numthreads(THREADS_X, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint neuronIndex = id.x;
+
+    // Ensure we don't process out-of-bounds neurons
+    if (neuronIndex >= numNeurons)
+        return;
+
+    // Get the binary value for the current neuron
+    int binaryValue = binaryData[neuronIndex];
+
+    // Assign color based on the binary value
+    float4 colorToSet = binaryValue == 1 ? float4(1.0, 1.0, 0.0, 1.0) : float4(0.0, 0.0, 0.502, 1.0); // Yellow or Dark Blue
+
+    // Write the color to the output buffer
+    neuronColors[neuronIndex] = colorToSet;
+}

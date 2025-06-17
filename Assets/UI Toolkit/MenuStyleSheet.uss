@@ -1,0 +1,5 @@
+.header {
+    font-size: 18px;
+    color: rgb(255, 255, 255);
+    -unity-font-definition: url("project://database/Assets/UI%20Toolkit/UnityThemes/UnityDefaultRuntimeTheme.tss?fileID=2230732570650464555&guid=6bdd64bb9dc1240c68c4160788a9d944&type=3#NotInter-Regular");
+}

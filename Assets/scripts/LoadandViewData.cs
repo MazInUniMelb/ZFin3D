@@ -72,7 +72,7 @@ public class LoadandViewData : MonoBehaviour
         { 3, "Rhombencephalon" },  // Focus area
         { 4, "Spinal" },   
         { 5, "Telencephalon" },    // Focus area
-        { 6, "Custom" } // Assuming >7 is custom, you can add more if needed
+        { 6, "None" } 
     };
 
 Dictionary<string, Color>regionColours = new Dictionary<string, Color>
@@ -146,6 +146,7 @@ Dictionary<string, Color>regionColours = new Dictionary<string, Color>
             foreach (string regionName in regionNames)
             {
                 GameObject region = new GameObject(regionName);
+                Debug.Log(regionName + " created");
                 // add dictionary entry for region
                 regionTransforms[regionName] = region.transform;
                 // Set the parent of the region to the brain object
@@ -674,6 +675,12 @@ private IEnumerator LoadAndShowMessage(string filename)
                 }
             }
         }
+                // add button to export videos for all fish
+        {
+            if (signalStepCoroutine != null)
+                StopCoroutine(signalStepCoroutine);
+            signalStepCoroutine = StartCoroutine(ExportAllFishVideos());
+        }
         return; // Don't draw the rest of the GUI until a file is loaded
     }
         // Add a button to start stepping through signal data
@@ -701,14 +708,6 @@ private IEnumerator LoadAndShowMessage(string filename)
                 signalStepCoroutine = StartCoroutine(ExportSignalDataVideo(signalData, currentFishName, 0));
             }
             
-            // add button to export videos for all fish
-            if (GUI.Button(new Rect(10, 400, 300, 30), "Export Videos for All Fish"))
-            {
-                if (signalStepCoroutine != null)
-                    StopCoroutine(signalStepCoroutine);
-                signalStepCoroutine = StartCoroutine(ExportAllFishVideos());
-            }
-
  }
 
     // show signal timestamp as text as well while stepping through
@@ -887,34 +886,57 @@ void HighlightNeuron(GameObject neuron)
         signalStepCoroutine = null;
     }
 
+    // Method to extract fish number
+    private int GetFishNumber(string filename)
+    {
+        Match match = Regex.Match(filename, @"FishSignalData(\d+)");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out int number))
+        {
+            return number;
+        }
+        return -1; // Return -1 or throw an exception if no valid number found
+    }
+
     private IEnumerator ExportAllFishVideos()
     {
         isExportingVideo = true; // Hide GUI during batch export
 
         foreach (string csvFile in availableSignalFiles)
         {
-            // Extract fish name/id from filename (e.g., ZF.FishSignalData07_20250530_141502.csv -> Fish07)
-            var match = System.Text.RegularExpressions.Regex.Match(csvFile, @"FishSignalData(\d+)");
-            if (match.Success)
-                currentFishName = "Fish" + match.Groups[1].Value;
+            // if fishnumber is < 38 then skip it
+            int fishNumber = GetFishNumber(csvFile);
+            Debug.Log("Processing file: " + csvFile + " with fish number: " + fishNumber);
+            if (fishNumber > 37)
+            {
+                // Extract fish name/id from filename (e.g., ZF.FishSignalData07_20250530_141502.csv -> Fish07)
+                var match = System.Text.RegularExpressions.Regex.Match(csvFile, @"FishSignalData(\d+)");
+                if (match.Success)
+                    currentFishName = "Fish" + match.Groups[1].Value;
+                else
+                    currentFishName = Path.GetFileNameWithoutExtension(csvFile);
+                loadingMessage = $"Loading {csvFile} for fish {currentFishName} ...";
+                yield return StartCoroutine(LoadAndShowMessage(csvFile));
+
+                // Wait for signal data to be loaded
+                while (!isSignalDataLoaded)
+                    yield return null;
+
+                loadingMessage = $"Exporting video for {currentFishName}...";
+                yield return StartCoroutine(ExportSignalDataVideo(signalData, currentFishName, 0));
+            }
             else
-                currentFishName = Path.GetFileNameWithoutExtension(csvFile);
-            loadingMessage = $"Loading {csvFile} for fish {currentFishName} ...";
-            yield return StartCoroutine(LoadAndShowMessage(csvFile));
-
-            // Wait for signal data to be loaded
-            while (!isSignalDataLoaded)
-                yield return null;
-
-            loadingMessage = $"Exporting video for {currentFishName}...";
-            yield return StartCoroutine(ExportSignalDataVideo(signalData,currentFishName, 0));
+            {
+                Debug.Log($"Skipping fish {fishNumber} as it is below the threshold.");
+            }
         }
 
         loadingMessage = "All videos exported!";
         yield return new WaitForSeconds(2f);
         loadingMessage = null;
         isExportingVideo = false;
-    }
+    } // end of ExportAllFishVideos
+
+
     IEnumerator ExportSignalDataVideo(int[,] signalData,string fishID, int startTimestamp)
     {
         isExportingVideo = true; // Hide GUI
@@ -1004,5 +1026,5 @@ void HighlightNeuron(GameObject neuron)
             neuronColoursBuffer = null;
         }
     }
-} // end of class
+} // end of class. class dismissed.
 

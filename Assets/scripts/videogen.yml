@@ -1,0 +1,14 @@
+name: videogen
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pillow=9.2.0
+  - ffmpeg=4.4.1
+  - ffmpeg-python=0.2.0
+  - numpy=1.22.3
+  - opencv-python=4.5.5.64
+  - pip
+  - pip:
+    - moviepy==1.0.3

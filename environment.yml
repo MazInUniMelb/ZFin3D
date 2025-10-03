@@ -1,9 +1,13 @@
-name: zebrafish-video
+name: text analytics
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
-  - opencv
+  - python=3.13
+  - os
+  - pandas
+  - docx
+  - re
+  - datetime
   - pip
   - pip:
       - notebook

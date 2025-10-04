@@ -10,20 +10,16 @@ namespace BrainComponents
         public Dictionary<string, RegionData> regions = new Dictionary<string, RegionData>();
         public List<NeuronData> neurons = new List<NeuronData>();
         public Bounds bounds = new Bounds();
-        public Dictionary<string, List<float>> totalActivityList = new Dictionary<string, List<float>>();
+        public Dictionary<string, Dictionary<int, float>> totalActivityList = new Dictionary<string, Dictionary<int, float>>();
 
         public void AddActivity(string fishName, int timeIdx, float value)
         {
             if (!totalActivityList.ContainsKey(fishName))
             {
-                totalActivityList[fishName] = new List<float>();
+                totalActivityList[fishName] = new Dictionary<int, float>();
             }
-            var activityList = totalActivityList[fishName];
-            while (activityList.Count <= timeIdx)
-            {
-                activityList.Add(0f);
-            }
-            activityList[timeIdx] += value;
+            totalActivityList[fishName][timeIdx] = value;
+            // Debug.Log($"Adding Brain {this.name} activity for fish {fishName} at timeIdx {timeIdx}. Total so far: {totalActivityList[fishName].Count}");
         }
 
         public void AddNeuron(NeuronData neuron)

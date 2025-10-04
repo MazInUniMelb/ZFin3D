@@ -5,6 +5,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Collections;
 using UnityEditor;
+using UnityEngine.UI;
 
 using BrainComponents;
 
@@ -120,6 +121,9 @@ public class LoadFishData : MonoBehaviour
 
     [Tooltip("Show seizure details")]
     public TMPro.TextMeshProUGUI seizureDetails;
+    public GameObject progressBar;
+    public Image progressBarFill;
+    public TMPro.TextMeshProUGUI progressBarText;
 
     private GameObject brainParent; // Parent object for all brains
 
@@ -302,13 +306,13 @@ public class LoadFishData : MonoBehaviour
     }
 
 
-    private void LoadSeizureData(string fishName)
+    private IEnumerator LoadSeizureData(string fishName)
     {
         if (!fishFileDict.TryGetValue(fishName, out string fishFile))
         {
             statusMessage.text = $"Error: Fish name {fishName} not found in available files.";
             Debug.LogError(statusMessage.text);
-            return;
+            yield break;
         }
         statusMessage.text = $"Loading seizure data for fish: {fishFile} and region: {selectedRegion}";
         int numRows = 0;
@@ -318,7 +322,7 @@ public class LoadFishData : MonoBehaviour
         if (!File.Exists(fullPath))
         {
             Debug.LogError("File not found: " + fullPath);
-            return;
+            yield break;
         }
 
         // First pass: get number of columns and rows
@@ -339,46 +343,60 @@ public class LoadFishData : MonoBehaviour
         Debug.Log($"Found {numCols} signal columns for {numRows} neuron/rows, in {fishFile}");
 
         statusMessage.text = $"Detected {numRows} rows and {numCols} signal columns in {fishFile}";
+        int rowIdx = 0;
+        int firstActivityColIdx = 10; // Skip the first 10 columns of neuron data
+        int progress = 0;
+        int maxProgress = numCols * numRows;
         using (StreamReader reader = new StreamReader(fullPath))
         {
             string line;
-            int rowIdx = 0;
-            int firstActivityColIdx = 10; // Skip the first 10 columns of neuron data
 
             // Skip header
             reader.ReadLine();
             // Read the rest of the seizure file line by line
             Debug.Log($"Starting while loop {rowIdx} < {numRows}");
-            int maxNeurons = brains[0].neurons.Count;
-            while ((line = reader.ReadLine()) != null && rowIdx < numRows)
+            // int maxNeurons = brains[0].neurons.Count;
+            int batchSize = 500;
+            while (rowIdx < numRows)
             {
+                line = reader.ReadLine();
+                if (line == null) break; // End of file
                 string[] values = line.Split(',');
-                for (int colIdx = firstActivityColIdx; colIdx < values.Length; colIdx++)
+                int colIdx = firstActivityColIdx;
+                int forIterations = 0;
+                while (colIdx < values.Length)
                 {
                     if (float.TryParse(values[colIdx], out float activationValue))
                     {
+                        progress += 1;
                         foreach (var brain in brains)
                         {
-                            try
+                            if (rowIdx >= brain.neurons.Count)
                             {
-                                var neuron = brain.neurons[rowIdx];
-                                // add to total nbr active neurons for this timestamp (column)
-                                neuron.AddActivity(fishName, activationValue > 0 ? 1 : 0);
+                                // Debug.LogWarning($"Skipping row {rowIdx} for brain {brain.name} with only {brain.neurons.Count} neurons.");
+                                continue;
                             }
-                            catch (ArgumentOutOfRangeException)
-                            {
-                                Debug.LogError($"Row index {rowIdx} out of range for brain with {brain.neurons.Count} neurons.");
-                            }
+                            var neuron = brain.neurons[rowIdx];
+                            neuron.AddActivity(fishName, activationValue > 0 ? 1 : 0, colIdx - firstActivityColIdx);
                         }
+                    }
+                    colIdx++;
+                    forIterations++;
+                    if (forIterations > values.Length)
+                    {
+                        // Debug.Log($"Breaking out of the for loop {forIterations}. Total columns {values.Length}");
+                        break;
                     }
                 }
 
                 // move to next line in file
                 rowIdx += 1;
-                if (rowIdx > maxNeurons - 1)
+                if (rowIdx % batchSize == 0)
                 {
-                    Debug.Log($"Breaking out of the while loop {rowIdx}/{maxNeurons}");
-                    break;
+                    progressBarFill.fillAmount = (float)progress / maxProgress;
+                    progressBarText.text = $"{(int)((float)progress / maxProgress * 100)}%";
+                    Debug.Log($"Processed {rowIdx}/{numRows} rows, progress: {progress}/{maxProgress}");
+                    yield return null; // Yield to avoid freezing
                 }
             }
         }
@@ -390,7 +408,11 @@ public class LoadFishData : MonoBehaviour
                 region.UpdateMinMax();
             }
         }
-        return;
+        progressBarFill.fillAmount = (float)progress / maxProgress;
+        progressBarText.text = $"{(int)((float)progress / maxProgress * 100)}%";
+        progressBar.SetActive(false);
+        Debug.Log($"Processed {rowIdx}/{numRows} rows, progress: {progress}/{maxProgress}");
+        yield return null;
     }
 
 
@@ -405,7 +427,10 @@ public class LoadFishData : MonoBehaviour
         Debug.Log($"Brain[0] has {brains[0].neurons.Count} neurons");
         Debug.Log($"Region {region.name} has {region.neurons.Count} neurons");
         Debug.Log("about to load seizure data for fish " + fishName);
-        LoadSeizureData(fishName);
+        progressBar.SetActive(true);
+        progressBarFill.fillAmount = 0f;
+        progressBarText.text = "0%";
+        StartCoroutine(LoadSeizureData(fishName));
         // MakeSeizureLine(regionName);
     }
 

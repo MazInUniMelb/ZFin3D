@@ -11,7 +11,7 @@ namespace BrainComponents
         public Dictionary<string, RegionData> subRegions = new Dictionary<string, RegionData>();
         public List<NeuronData> neurons = new List<NeuronData>();
         public Bounds bounds = new Bounds();
-        public Dictionary<string, List<float>> sumActivities = new Dictionary<string, List<float>>();
+        public Dictionary<string, Dictionary<int, float>> sumActivities = new Dictionary<string, Dictionary<int, float>>();
         public Dictionary<string, float> numActivities = new Dictionary<string, float>();
         public Dictionary<string, float> minActivities = new Dictionary<string, float>();
         public Dictionary<string, float> maxActivities = new Dictionary<string, float>();
@@ -20,9 +20,8 @@ namespace BrainComponents
         {
             foreach (var fishName in sumActivities.Keys)
             {
-                var activities = sumActivities[fishName];
-                minActivities[fishName] = activities.Min();
-                maxActivities[fishName] = activities.Max();
+                minActivities[fishName] = sumActivities[fishName].Values.Min();
+                maxActivities[fishName] = sumActivities[fishName].Values.Max();
             }
 
         }
@@ -30,20 +29,17 @@ namespace BrainComponents
         {
             if (!sumActivities.ContainsKey(fishName))
             {
-                sumActivities[fishName] = new List<float>();
+                sumActivities[fishName] = new Dictionary<int, float>();
                 numActivities[fishName] = 0;
             }
-            if (sumActivities[fishName].Count < timeIdx+1) {
-                sumActivities[fishName].Add(0f); // Initial sum value
-            }
-            // Debug.Log($"Adding activity to region {this.name} for fish {fishName} at timeIdx {timeIdx}. Current timeSeries length: {sumActivities[fishName].Count}");
-            sumActivities[fishName][timeIdx] += value;
+            sumActivities[fishName][timeIdx] = sumActivities[fishName].GetValueOrDefault(timeIdx, 0f) + value;
             numActivities[fishName] += 1;
+            // Debug.Log($"Adding {this.name} activity for fish {fishName} at timeIdx {timeIdx}. Total so far: {numActivities[fishName]}/{sumActivities[fishName].Count}");
         }
         public void AddNeuron(NeuronData neuron)
         {
             neurons.Add(neuron);
-            if(neurons.Count == 1)
+            if (neurons.Count == 1)
             {
                 bounds = new Bounds(neuron.originalPosition, Vector3.zero);
             }

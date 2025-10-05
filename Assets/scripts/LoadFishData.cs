@@ -78,7 +78,7 @@ public class LoadFishData : MonoBehaviour
 
     [Header("Animation")]
     [Tooltip("The time interval between each step in the seizure data animation")]
-    public float animationStepInterval = 0.02f;
+    public float animationStepInterval = 0.001f;
     [Tooltip("Start position of line graph showing total signal for timestamp")]
     public Vector3 szLeftPos;
     [Tooltip("End position of line graph showing total signal for timestamp")]
@@ -151,6 +151,7 @@ public class LoadFishData : MonoBehaviour
     private int currentSignalTimestamp = -1;
     private bool isPaused = false; // Tracks whether the step-through is paused
 
+    public GameObject timelineMarkerPrefab;
     private GameObject timelineMarker;
     private List<Vector3> timelinePoints = new List<Vector3>();
 
@@ -306,7 +307,7 @@ public class LoadFishData : MonoBehaviour
     }
 
 
-    private IEnumerator LoadSeizureData(string fishName)
+    private IEnumerator LoadSeizureData(string fishName, string regionName, int batchSize = 1000)
     {
         if (!fishFileDict.TryGetValue(fishName, out string fishFile))
         {
@@ -356,7 +357,6 @@ public class LoadFishData : MonoBehaviour
             // Read the rest of the seizure file line by line
             Debug.Log($"Starting while loop {rowIdx} < {numRows}");
             // int maxNeurons = brains[0].neurons.Count;
-            int batchSize = 500;
             while (rowIdx < numRows)
             {
                 line = reader.ReadLine();
@@ -412,6 +412,8 @@ public class LoadFishData : MonoBehaviour
         progressBarText.text = $"{(int)((float)progress / maxProgress * 100)}%";
         progressBar.SetActive(false);
         Debug.Log($"Processed {rowIdx}/{numRows} rows, progress: {progress}/{maxProgress}");
+
+        yield return StartCoroutine(MakeSeizureLine(regionName));
         yield return null;
     }
 
@@ -430,11 +432,10 @@ public class LoadFishData : MonoBehaviour
         progressBar.SetActive(true);
         progressBarFill.fillAmount = 0f;
         progressBarText.text = "0%";
-        StartCoroutine(LoadSeizureData(fishName));
-        // MakeSeizureLine(regionName);
+        StartCoroutine(LoadSeizureData(fishName, regionName));
     }
 
-    void MakeSeizureLine(string regionName)
+    IEnumerator MakeSeizureLine(string regionName)
     {
         Color regionColor = regionColours[regionName];
         // Create or clear existing seizure line object
@@ -459,7 +460,6 @@ public class LoadFishData : MonoBehaviour
 
         int numPoints = (int)brains[0].regions[regionName].sumActivities[selectedFish].Count;
         Debug.Log($"Creating seizure line with {numPoints} points for fish {selectedFish} in region {regionName}");
-        return;
         lineRenderer.positionCount = numPoints;
 
         float minValue = brains[0].regions[regionName].minActivities[selectedFish];
@@ -503,6 +503,7 @@ public class LoadFishData : MonoBehaviour
 
                 axisTimestamp.transform.position = axisPos;
                 axisTimestamp.transform.SetParent(szLine.transform, false);
+                yield return null;
             }
         } // end of loop through timestamps
 
@@ -522,29 +523,22 @@ public class LoadFishData : MonoBehaviour
             darkLine.positionCount = 2;
             darkLine.startWidth = 8f;
             darkLine.endWidth = 8f;
-            darkLine.material = dullMaterial;
+            // darkLine.material = dullMaterial;
+            darkLine.material = glowMaterial;
             darkLine.startColor = Color.black;
             darkLine.endColor = Color.black;
             darkLine.SetPosition(0, new Vector3(szLeftPos.x, szLeftPos.y - markerSpacer, szLeftPos.z));
             darkLine.SetPosition(1, new Vector3(szRightPos.x, szRightPos.y - markerSpacer, szRightPos.z));
         }
 
-        // Add movable timeline marker to run along marker line
         if (timelineMarker == null)
         {
-            timelineMarker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            // set material to glow material
-            timelineMarker.GetComponent<Renderer>().material = glowMaterial;
-            timelineMarker.transform.localScale = Vector3.one * 20f;
-            timelineMarker.GetComponent<Renderer>().material.color = Color.red;
-            timelineMarker.name = "TimelineMarker";
-            timelineMarker.transform.SetParent(mkLine.transform, false);
+            timelineMarker = Instantiate(timelineMarkerPrefab);
         }
-
         timelineMarker.transform.position = timelinePoints[0];
         //timelineMarker.SetActive(false); // Hide initially
 
-        return;
+        yield return null;
     } // end of MakeSeizureLine
 
 
@@ -563,18 +557,19 @@ public class LoadFishData : MonoBehaviour
         StartCoroutine(StepThroughSeizureData(startTimestamp, duration));
     }
 
-    IEnumerator StepThroughSeizureData(int startTimestamp, int duration = -1)
+    IEnumerator StepThroughSeizureData(int startTimestamp, int duration = -1, int skipSize = 1, int batchSize = 100)
     {
         int numNeurons = brains[0].regions[selectedRegion].neurons.Count;
         int numTimestamps = (int)brains[0].regions[selectedRegion].sumActivities[selectedFish].Count;
 
+        Debug.Log($"Stepping through seizure data for fish {selectedFish} in region {selectedRegion}. Num Neurons: {numNeurons}, Num Timestamps: {numTimestamps}");
         // set all neurons to dull material first
         foreach (NeuronData neuronObj in brains[0].regions[selectedRegion].neurons)
         {
             if (neuronObj.gameObject != null)
             {
-                neuronObj.renderer.material = dullMaterial;
-                neuronObj.transform.localScale = new Vector3(inactiveNeuronSize, inactiveNeuronSize, inactiveNeuronSize);
+                // neuronObj.renderer.material = dullMaterial;
+                neuronObj.Deactivate();
             }
         }
 
@@ -582,7 +577,8 @@ public class LoadFishData : MonoBehaviour
             ? startTimestamp + duration
             : numTimestamps;
 
-        for (int col = startTimestamp; col < endTimestamp; col++)
+        var activeNeurons = new List<NeuronData>();
+        for (int col = startTimestamp; col < endTimestamp; col += skipSize)
         {
             // todo add pause button
             //while (isPaused)
@@ -591,9 +587,21 @@ public class LoadFishData : MonoBehaviour
             // statusMessage.text = $"Stepping through timestamp: {col + 1}/{numTimestamps}";
 
             currentSignalTimestamp = col;
-            foreach (NeuronData neuronObj in brains[0].regions[selectedRegion].neurons)
+            int neuronsProcessed = 0;
+            foreach (NeuronData neuron in activeNeurons)
             {
-                neuronObj.SetActiveState(selectedFish, col);
+                neuron.Deactivate();
+            }
+
+            activeNeurons = brains[0].regions[selectedRegion].GetActiveNeurons(selectedFish, col);
+            foreach (NeuronData neuron in activeNeurons)
+            {
+                neuron.SetActiveState(selectedFish, col);
+                neuronsProcessed += 1;
+                if (neuronsProcessed % batchSize == 0)
+                {
+                    yield return null; // Yield to avoid freezing
+                }
             }
 
             // Move timeline marker
@@ -603,7 +611,8 @@ public class LoadFishData : MonoBehaviour
                 timelineMarker.transform.position = timelinePoints[col];
             }
 
-            yield return new WaitForSeconds(animationStepInterval);
+            // yield return new WaitForSeconds(animationStepInterval);
+            yield return null;
         }
         currentSignalTimestamp = -1;
         uiHandler.ShowMenuPanel();
@@ -729,7 +738,8 @@ public class LoadFishData : MonoBehaviour
                 newNeuron.inactiveNeuronSize = inactiveNeuronSize;
                 newNeuron.transform.SetParent(region.gameObject.transform, false);
 
-                newNeuron.InitNeuron(sphereMesh, dullMaterial);
+                // newNeuron.InitNeuron(sphereMesh, dullMaterial);
+                newNeuron.InitNeuron(sphereMesh, glowMaterial);
 
                 for (var fi = featureSetStartIndex; fi < values.Length; fi++)
                 {

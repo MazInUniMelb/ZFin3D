@@ -45,6 +45,7 @@ namespace BrainComponents
         public Color color;
         public string subregion;
         public string label;
+        private HighlightSphere highlightSphere;
         public MeshFilter meshFilter;
         public Renderer renderer;
         public SphereCollider collider;
@@ -52,11 +53,29 @@ namespace BrainComponents
         public RegionData region;
         public FeatureData featureData;
         public Dictionary<string, Dictionary<int, float>> activityList = new Dictionary<string, Dictionary<int, float>>();
+        public bool isActive = false;
+        private bool wasActive = false;
         public float inactiveNeuronSize = 2.0f; // Set from LoadFishData
         public float activeNeuronSize = 4.0f; // Set from LoadFishData
+
+
+        public void Awake()
+        {
+            if (highlightSphere == null) highlightSphere = gameObject.GetOrAddComponent<HighlightSphere>();
+        }
         public void ResetPosition()
         {
             this.transform.position = originalPosition;
+        }
+
+        private void OnValidate()
+        {
+            if (isActive != wasActive)
+            {
+                if (isActive) Activate();
+                else Deactivate();
+                wasActive = isActive;
+            }
         }
 
         public void AddActivity(string fishName, float value, int timeIdx = -1)
@@ -71,6 +90,24 @@ namespace BrainComponents
             brain.AddActivity(fishName, timeIdx, value);
         }
 
+        // Active State
+        public void Activate()
+        {
+            isActive = true;
+            // renderer.material.SetColor("_EmissionColor", color * 2.0f); // Bright emission
+            // renderer.material.SetColor("_BaseColor", color);
+            highlightSphere.TurnOn();
+        }
+
+        // Inactive State
+        public void Deactivate()
+        {
+            isActive = false;
+            // renderer.material.SetColor("_EmissionColor", color * 0.1f); // Dim emission
+            // renderer.material.SetColor("_BaseColor", color * 0.5f);
+            highlightSphere.TurnOff();
+        }
+
         public void SetActiveState(string fishName, int timeIdx)
         {
             if (activityList.ContainsKey(fishName) && timeIdx < activityList[fishName].Count)
@@ -78,26 +115,11 @@ namespace BrainComponents
                 float activityValue = activityList[fishName][timeIdx];
                 if (activityValue > 0)
                 {
-                    // Active state
-                    renderer.material.SetColor("_EmissionColor", color * 2.0f); // Bright emission
-                    renderer.material.SetColor("_BaseColor", color);
-                    transform.localScale = new Vector3(activeNeuronSize, activeNeuronSize, activeNeuronSize);
-                }
-                else
-                {
-                    // Inactive state
-                    renderer.material.SetColor("_EmissionColor", color * 0.1f); // Dim emission
-                    renderer.material.SetColor("_BaseColor", color * 0.5f);
-                    transform.localScale = new Vector3(inactiveNeuronSize, inactiveNeuronSize, inactiveNeuronSize);
+                    Activate();
+                    return;
                 }
             }
-            else
-            {
-                // No data for this fish or time index, set to inactive
-                renderer.material.SetColor("_EmissionColor", color * 0.1f); // Dim emission
-                renderer.material.SetColor("_BaseColor", color * 0.5f);
-                transform.localScale = new Vector3(inactiveNeuronSize, inactiveNeuronSize, inactiveNeuronSize);
-            }
+            Deactivate();
         }
 
         public void InitNeuron(Mesh sphereMesh, Material glowMaterial)
@@ -121,9 +143,10 @@ namespace BrainComponents
             if (featureData == null) featureData = gameObject.AddComponent<FeatureData>();
 
             // start with them all full size (activeNeruonSize)
-            transform.localScale = new Vector3(activeNeuronSize, activeNeuronSize, activeNeuronSize);
+            transform.localScale = new Vector3(inactiveNeuronSize, inactiveNeuronSize, inactiveNeuronSize);
             renderer.material.SetColor("_EmissionColor", color);
             renderer.material.SetColor("_BaseColor", color);
         }
+
     }
 }

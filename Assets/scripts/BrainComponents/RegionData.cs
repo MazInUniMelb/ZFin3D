@@ -23,7 +23,6 @@ namespace BrainComponents
                 minActivities[fishName] = sumActivities[fishName].Values.Min();
                 maxActivities[fishName] = sumActivities[fishName].Values.Max();
             }
-
         }
         public void AddActivity(string fishName, int timeIdx, float value)
         {
@@ -44,6 +43,21 @@ namespace BrainComponents
                 bounds = new Bounds(neuron.originalPosition, Vector3.zero);
             }
             bounds.Encapsulate(neuron.renderer.bounds);
+        }
+
+        public List<NeuronData> GetActiveNeurons(string fishName, int timeIdx, float threshold = 0.5f)
+        {
+            List<NeuronData> activeNeurons = new List<NeuronData>();
+            foreach (var neuron in neurons)
+            {
+                if (neuron.activityList.ContainsKey(fishName) &&
+                    neuron.activityList[fishName].ContainsKey(timeIdx) &&
+                    neuron.activityList[fishName][timeIdx] >= threshold)
+                {
+                    activeNeurons.Add(neuron);
+                }
+            }
+            return activeNeurons;
         }
     }
 }

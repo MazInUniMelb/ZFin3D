@@ -2,7 +2,7 @@ using UnityEngine;
 
 // This attribute makes the script run even if the engine is NOT in play mode!
 // BUT WATCH OUT! If you mistakenly put an infinite loop in the Update() function, it will crash the whole editor!
- [ExecuteAlways] // I've disabled it now so I don't accidentally change colors while testing in the editor before play mode!
+[ExecuteAlways] // I've disabled it now so I don't accidentally change colors while testing in the editor before play mode!
 public class HighlightSphere : MonoBehaviour
 {
     /**
@@ -12,61 +12,117 @@ public class HighlightSphere : MonoBehaviour
     * Here is the code for the HDR color picker, which is the ColorMutator class in the Unity Editor:
     *   https://github.com/Unity-Technologies/UnityCsReference/blob/master/Editor/Mono/GUI/ColorMutator.cs
     **/
-    [Range(1.0f, 10.0f)] public float glowIntensity = 1.0f; // Adding [Range(min, max)] before a numeric (public or serializable) variable adds a slider to the inspector so you can make live changes easily!
+
+    public AnimationCurve mIntensityCurve;
+    public AnimationCurve mSizeCurve;
+    public float glowIntensity = -1.0f; // Adding [Range(min, max)] before a numeric (public or serializable) variable adds a slider to the inspector so you can make live changes easily!
+    private float size = 2.0f;
+    [Range(1.0f, 2.0f)] public float minSize = 2.0f; // Set from LoadFishData
+    [Range(2.0f, 4.0f)] public float maxSize = 4.0f; // Set from LoadFishData
+
+    [Range(-2.0f, 1.0f)] public float minGlowIntensity = -1.0f;
+    [Range(2.0f, 6.0f)] public float maxGlowIntensity = 5.0f;
     public bool animate = true;
-    [Range(0.05f, 1.0f)] public float animationSpeed = 0.5f;
+    public bool loop = false;
+    [Range(0.25f, 2.0f)] public float animationSpeed = 1.5f;
     public Color baseColor;
     public Color mutatedColor;
     public ColorMutator colorMutator; // The cool thing is that the ColorMutator class has its own inspector in the Unity Editor, so you can see the changes in real-time!
-    private Material glowMaterial = null;
-    float t = 0.0f; // starting time value for the Lerp (Lerp => Linear intERPolation)
-    float animationDirection = 1.0f; // 1.0f for increasing, -1.0f for decreasing time
+    public Material glowMaterial = null;
+    public float t = 0.0f; // starting time value for the Lerp (Lerp => Linear intERPolation)
+    float animationDirection = -1.0f; // 1.0f for increasing, -1.0f for decreasing time
 
 
     // Because this script is set to "ExecuteAlways", and Awake() gets called every time the script is loaded
     // We need to check if we already retreived the material from the object
     // GetComponent() is a very expensive operation in Unity, so we want to avoid it if we can!
     // Always cache your component after the first time you get it in Start() or Awake()!
-    void Awake()
+    void Start()
     {
-        if(glowMaterial == null){
+        if (glowMaterial == null)
+        {
             glowMaterial = GetComponent<Renderer>().material;
             glowMaterial.EnableKeyword("_EMISSION"); // Apparently very important: https://discussions.unity.com/t/setting-emission-color-programatically/152813/2
         }
-        if(glowMaterial != null){
+        if (glowMaterial != null)
+        {
             baseColor = glowMaterial.GetColor("_EmissionColor");
             mutatedColor = glowMaterial.GetColor("_EmissionColor");
+        }
+        if (mIntensityCurve == null)
+        {
+            mIntensityCurve = AnimationCurve.EaseInOut(0, minGlowIntensity, 1, maxGlowIntensity);
+            glowIntensity = minGlowIntensity;
+        }
+        if (mSizeCurve == null)
+        {
+            mSizeCurve = AnimationCurve.EaseInOut(0, minSize, 1, maxSize);
+            size = minSize;
+            gameObject.transform.localScale = Vector3.one * size;
         }
     }
 
     void Update()
     {
-        if(animate){
+        if (animate)
+        {
             UpdateAnimatedIntensity();
         }
-        UpdateMaterialColorIntensity(glowIntensity);
     }
 
-    void UpdateAnimatedIntensity(float minimum = 1.0f, float maximum = 10.0f)
+    public void TurnOn()
     {
-        glowIntensity = Mathf.Lerp(minimum, maximum, t);
+        if (animationDirection > 0f) return;
+        animationDirection = 1.0f;
+        t = 0.0f;
+    }
 
-        t += animationSpeed * animationDirection * Time.deltaTime;
+    public void TurnOff()
+    {
+        if (animationDirection < 0f) return;
+        animationDirection = -1.0f;
+        t = 1.0f;
+    }
 
-        // If our time value has passed 1.0f, we changed the animation direction to be negative so the value will start decreasing instead
-        if (animationDirection > 0f && t > 1.0f)
-        {
-            glowIntensity = maximum;
-            animationDirection = -1.0f;
-        }
-        if (animationDirection < 0f && t <= 0.0f)
-        {
-            glowIntensity = minimum;
-            animationDirection = 1.0f;
-        }
+    void Toggle()
+    {
 
     }
-    void UpdateMaterialColorIntensity(float glowIntensity){
+
+    void UpdateAnimatedIntensity()
+    {
+        glowIntensity = mIntensityCurve.Evaluate(t);
+        size = mSizeCurve.Evaluate(t);
+        // If our time value has passed 1.0f, we changed the animation direction to be negative so the value will start decreasing instead
+
+        if (animationDirection < 0f)
+        {
+            if (glowIntensity <= minGlowIntensity)
+            {
+                glowIntensity = minGlowIntensity;
+                if (loop)
+                    TurnOn();
+            }
+            else
+            {
+                t += animationSpeed * animationDirection * Time.deltaTime;
+            }
+        }
+        else
+        {
+            if (glowIntensity >= maxGlowIntensity)
+            {
+                glowIntensity = maxGlowIntensity;
+                if (loop)
+                    TurnOff();
+            }
+            else
+            {
+                t += animationSpeed * animationDirection * Time.deltaTime;
+            }
+        }
+
+        gameObject.transform.localScale = Vector3.one * size;
         // Let's also make sure we have already retreived the material before trying to update it!
         if (glowMaterial != null)
         {

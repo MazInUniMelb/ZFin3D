@@ -164,6 +164,8 @@ public class LoadFishData : MonoBehaviour
 
     private Color baseColor;   // this is now set from datafile depending on region
     private Color mutatedColor; // changing this to private since its set for each neuron
+    private int startTimestamp = 0;
+    private int endTimestamp = -1;
 
 
     void Awake()
@@ -534,6 +536,7 @@ public class LoadFishData : MonoBehaviour
         if (timelineMarker == null)
         {
             timelineMarker = Instantiate(timelineMarkerPrefab);
+            timelineMarker.GetComponent<DraggableObject>().onDrag.AddListener(OnMarkerDrag);
         }
         timelineMarker.transform.position = timelinePoints[0];
         //timelineMarker.SetActive(false); // Hide initially
@@ -542,7 +545,7 @@ public class LoadFishData : MonoBehaviour
     } // end of MakeSeizureLine
 
 
-    public void ShowSeizureData(int startTimestamp, int duration = -1)
+    public void ShowSeizureData(int pStartTimestamp = -1, int duration = -1)
     {
         if (brains[0].regions[selectedRegion].sumActivities[selectedFish].Count < 1f)
         {
@@ -553,8 +556,45 @@ public class LoadFishData : MonoBehaviour
         // make the menu ui inactive
         uiHandler.HideMenuPanel();
 
+        if (pStartTimestamp >= 0)
+            startTimestamp = pStartTimestamp;
         // Start stepping through the seizure data
         StartCoroutine(StepThroughSeizureData(startTimestamp, duration));
+    }
+
+    public void OnMarkerDrag()
+    {
+        if (timelineMarker != null && timelinePoints.Count > 0)
+        {
+            var markerX = timelineMarker.transform.position.x;
+            var firstTimestampX = timelinePoints[0].x;
+            var lastTimestampX = timelinePoints[timelinePoints.Count - 1].x;
+            if (markerX < firstTimestampX || markerX > lastTimestampX)
+            {
+                Debug.Log($"Marker dragged out of bounds: {markerX} not in ({firstTimestampX}, {lastTimestampX})");
+                // out of bounds
+                return;
+            }
+            // find the closest point to the marker
+            float closestDist = float.MaxValue;
+            int closestIdx = -1;
+            for (int i = 0; i < timelinePoints.Count; i++)
+            {
+                float dist = Math.Abs(markerX - timelinePoints[i].x);
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    closestIdx = i;
+                }
+            }
+            if (closestIdx != -1 && closestIdx != currentSignalTimestamp)
+            {
+                Debug.Log($"Marker dragged to timestamp {closestIdx}");
+                startTimestamp = closestIdx;
+                currentSignalTimestamp = closestIdx;
+                uiHandler.startTimeInput.text = closestIdx.ToString();
+            }
+        }
     }
 
     IEnumerator StepThroughSeizureData(int startTimestamp, int duration = -1, int skipSize = 1, int batchSize = 100)
@@ -573,9 +613,11 @@ public class LoadFishData : MonoBehaviour
             }
         }
 
-        int endTimestamp = (duration > 0 && startTimestamp + duration < numTimestamps)
-            ? startTimestamp + duration
-            : numTimestamps;
+        int endTimestamp = numTimestamps;
+        if (duration > 0)
+        {
+            endTimestamp = Math.Min(startTimestamp + duration, numTimestamps);
+        }
 
         var activeNeurons = new List<NeuronData>();
         for (int col = startTimestamp; col < endTimestamp; col += skipSize)

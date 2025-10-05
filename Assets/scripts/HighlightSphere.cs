@@ -22,7 +22,8 @@ public class HighlightSphere : MonoBehaviour
 
     [Range(-2.0f, 1.0f)] public float minGlowIntensity = -1.0f;
     [Range(2.0f, 6.0f)] public float maxGlowIntensity = 5.0f;
-    public bool animate = true;
+    public bool animateGlow = true;
+    public bool animateSize = true;
     public bool loop = false;
     [Range(0.25f, 2.0f)] public float animationSpeed = 1.5f;
     public Color baseColor;
@@ -52,19 +53,21 @@ public class HighlightSphere : MonoBehaviour
         if (mIntensityCurve == null)
         {
             mIntensityCurve = AnimationCurve.EaseInOut(0, minGlowIntensity, 1, maxGlowIntensity);
-            glowIntensity = minGlowIntensity;
+            if (animateGlow)
+                glowIntensity = minGlowIntensity;
         }
         if (mSizeCurve == null)
         {
             mSizeCurve = AnimationCurve.EaseInOut(0, minSize, 1, maxSize);
             size = minSize;
-            gameObject.transform.localScale = Vector3.one * size;
+            if (animateSize)
+                gameObject.transform.localScale = Vector3.one * size;
         }
     }
 
     void Update()
     {
-        if (animate)
+        if (animateGlow || animateSize)
         {
             UpdateAnimatedIntensity();
         }
@@ -122,7 +125,8 @@ public class HighlightSphere : MonoBehaviour
             }
         }
 
-        gameObject.transform.localScale = Vector3.one * size;
+        if (animateSize)
+            gameObject.transform.localScale = Vector3.one * size;
         // Let's also make sure we have already retreived the material before trying to update it!
         if (glowMaterial != null)
         {

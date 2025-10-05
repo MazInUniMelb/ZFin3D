@@ -2,7 +2,7 @@ using Unity.VisualScripting;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro; 
+using TMPro;
 
 public class UIHandler : MonoBehaviour
 {
@@ -97,7 +97,7 @@ public class UIHandler : MonoBehaviour
     public void OnShowSeizureButtonClicked()
     {
         Debug.Log("Start showing seizure data");
-        int startTime = int.TryParse(startTimeInput.text, out var s) ? s : 0;
+        int startTime = int.TryParse(startTimeInput.text, out var s) ? s : -1;
         int duration = int.TryParse(durationInput.text, out var d) ? d : -1;
         loadFishData.ShowSeizureData(startTime, duration);
     }

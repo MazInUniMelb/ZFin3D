@@ -166,6 +166,7 @@ public class LoadFishData : MonoBehaviour
     private Color mutatedColor; // changing this to private since its set for each neuron
     private int startTimestamp = 0;
     private int endTimestamp = -1;
+    private List<NeuronData> activeNeurons = new List<NeuronData>();
 
 
     void Awake()
@@ -593,6 +594,17 @@ public class LoadFishData : MonoBehaviour
                 startTimestamp = closestIdx;
                 currentSignalTimestamp = closestIdx;
                 uiHandler.startTimeInput.text = closestIdx.ToString();
+                foreach (NeuronData neuron in activeNeurons)
+                {
+                    neuron.Deactivate();
+                }
+
+                activeNeurons = brains[0].regions[selectedRegion].GetActiveNeurons(selectedFish, closestIdx);
+                foreach (NeuronData neuron in activeNeurons)
+                {
+                    neuron.SetActiveState(selectedFish, closestIdx);
+                }
+
             }
         }
     }
@@ -619,7 +631,6 @@ public class LoadFishData : MonoBehaviour
             endTimestamp = Math.Min(startTimestamp + duration, numTimestamps);
         }
 
-        var activeNeurons = new List<NeuronData>();
         for (int col = startTimestamp; col < endTimestamp; col += skipSize)
         {
             // todo add pause button

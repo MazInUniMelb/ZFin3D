@@ -16,9 +16,9 @@ public class HighlightSphere : MonoBehaviour
     public AnimationCurve mIntensityCurve;
     public AnimationCurve mSizeCurve;
     public float glowIntensity = -1.0f; // Adding [Range(min, max)] before a numeric (public or serializable) variable adds a slider to the inspector so you can make live changes easily!
-    private float size = 2.0f;
-    [Range(1.0f, 2.0f)] public float minSize = 2.0f; // Set from LoadFishData
-    [Range(2.0f, 4.0f)] public float maxSize = 4.0f; // Set from LoadFishData
+    private float size = 5.0f;
+    [Range(1.0f, 5.0f)] public float minSize = 4.0f; // Set from LoadFishData
+    [Range(2.0f, 8.0f)] public float maxSize = 6.0f; // Set from LoadFishData
 
     [Range(-2.0f, 1.0f)] public float minGlowIntensity = -1.0f;
     [Range(2.0f, 6.0f)] public float maxGlowIntensity = 5.0f;
@@ -71,6 +71,14 @@ public class HighlightSphere : MonoBehaviour
         {
             UpdateAnimatedIntensity();
         }
+    }
+
+    public void SetSizes(float min, float max)
+    {
+        minSize = min;
+        maxSize = max;
+        // Optionally update curves if needed
+        mSizeCurve = AnimationCurve.EaseInOut(0, minSize, 1, maxSize);
     }
 
     public void TurnOn()

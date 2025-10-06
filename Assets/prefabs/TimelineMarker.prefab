@@ -29,7 +29,7 @@ Transform:
   m_GameObject: {fileID: 435877049279053570}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -800, y: 1960, z: 650}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 20, y: 20, z: 20}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -126,6 +126,12 @@ MonoBehaviour:
     x: 1
     y: 0
     z: 0
+  onDrag:
+    m_PersistentCalls:
+      m_Calls: []
+  onDragEnd:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &9145493022475761230
 GameObject:
   m_ObjectHideFlags: 0

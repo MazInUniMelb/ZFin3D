@@ -55,14 +55,16 @@ namespace BrainComponents
         public Dictionary<string, Dictionary<int, float>> activityList = new Dictionary<string, Dictionary<int, float>>();
         public bool isActive = false;
         private bool wasActive = false;
-        public float inactiveNeuronSize = 2.0f; // Set from LoadFishData
-        public float activeNeuronSize = 4.0f; // Set from LoadFishData
+        public float inactiveNeuronSize ; // Set from LoadFishData
+        public float activeNeuronSize; // Set from LoadFishData
 
 
         public void Awake()
         {
             if (highlightSphere == null) highlightSphere = gameObject.GetOrAddComponent<HighlightSphere>();
         }
+
+        
         public void ResetPosition()
         {
             this.transform.position = originalPosition;
@@ -122,7 +124,7 @@ namespace BrainComponents
             Deactivate();
         }
 
-        public void InitNeuron(Mesh sphereMesh, Material glowMaterial)
+        public void InitNeuron(Mesh sphereMesh, Material glowMaterial, float activeNeuronSize)
         {
             string neuronName = $"Neuron_{neuronIdx}";
             meshFilter = gameObject.GetComponent<MeshFilter>();
@@ -143,10 +145,14 @@ namespace BrainComponents
             if (featureData == null) featureData = gameObject.AddComponent<FeatureData>();
 
             // start with them all full size (activeNeruonSize)
-            transform.localScale = new Vector3(inactiveNeuronSize, inactiveNeuronSize, inactiveNeuronSize);
+            transform.localScale = new Vector3(activeNeuronSize, activeNeuronSize, activeNeuronSize);
             renderer.material.SetColor("_EmissionColor", color);
             renderer.material.SetColor("_BaseColor", color);
-        }
+
+            // Pass sizes to HighlightSphere
+            if (highlightSphere != null)
+                highlightSphere.SetSizes(inactiveNeuronSize, activeNeuronSize);
+                }
 
     }
 }

@@ -87,11 +87,13 @@ public class CameraHandler : MonoBehaviour
         // Use the extent to set the distance
         float minDistance = 100f; // Set based on your scene scale
         float maxDistance = 1500f;
-        float distance = Mathf.Clamp(extent * 2f, minDistance, maxDistance);
+        float distance = Mathf.Clamp(extent*1.2f, minDistance, maxDistance);
 
         // Main camera
         // todo move main camera slowly to new position
         Vector3 newCameraPos = centerPos + mainViewDir * distance;
+        // adjust y axis to be lower becuase whole brain is so much longer than it is wide
+        newCameraPos.y = newCameraPos.y*.4f;
         //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
         mainCamera.transform.position = newCameraPos;
         mainCamera.transform.LookAt(centerPos);
@@ -125,6 +127,7 @@ public class CameraHandler : MonoBehaviour
         // Main camera
         // todo move main camera slowly to new position
         Vector3 newCameraPos = centerPos + mainViewDir * distance;
+        newCameraPos.y = newCameraPos.y * .9f;
         //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
         mainCamera.transform.position = newCameraPos;
         mainCamera.transform.LookAt(centerPos);

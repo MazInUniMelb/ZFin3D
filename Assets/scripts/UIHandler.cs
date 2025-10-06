@@ -18,6 +18,8 @@ public class UIHandler : MonoBehaviour
 
     [Tooltip("Button to show seizure data")]
     public Button showSeizureButton;
+    [Tooltip("Button to make seizure frames")]
+    public Button makeFramesButton;
 
     [Tooltip("Input field for start time")]
     public TMP_InputField startTimeInput;
@@ -30,8 +32,11 @@ public class UIHandler : MonoBehaviour
 
     void Start()
     {
-        showSeizureButton.interactable = false;
+
         showSeizureButton.onClick.AddListener(OnShowSeizureButtonClicked);
+        makeFramesButton.onClick.AddListener(OnMakeFramesButtonClicked);
+
+        DisableActionButtons();
 
         regionDropdown.onValueChanged.AddListener(OnRegionDropdownChanged);
         fishDropdown.onValueChanged.AddListener(OnFishDropdownChanged);
@@ -88,17 +93,29 @@ public class UIHandler : MonoBehaviour
         Debug.Log("Hid choose fish panel");
     }
 
-    public void EnableActionButton()
+    public void EnableActionButtons()
     {
         showSeizureButton.interactable = true;
+        makeFramesButton.interactable = true;
+    }
+
+
+    public void DisableActionButtons()
+    {
+        showSeizureButton.interactable = false;
+        makeFramesButton.interactable = false;
     }
 
     // on button click call loadfishdata function ShowSeizureData
     public void OnShowSeizureButtonClicked()
     {
         Debug.Log("Start showing seizure data");
-        int startTime = int.TryParse(startTimeInput.text, out var s) ? s : -1;
-        int duration = int.TryParse(durationInput.text, out var d) ? d : -1;
-        loadFishData.ShowSeizureData(startTime, duration);
+        loadFishData.ShowSeizureData();
+    }
+
+    public void OnMakeFramesButtonClicked()
+    {
+        Debug.Log("Start making frames");
+        loadFishData.MakeSeizureFrames();
     }
 }

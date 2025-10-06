@@ -8,6 +8,7 @@ using UnityEditor;
 using UnityEngine.UI;
 
 using BrainComponents;
+using Unity.Mathematics;
 
 public class LoadFishData : MonoBehaviour
 {
@@ -21,23 +22,18 @@ public class LoadFishData : MonoBehaviour
     This neuronal data is captured by the Scott Lab at the University of Melbourne, Australia
 
     Todos: 
-        
-    Later us:
-        * Bug Telencephalon fish14
-        * Bug Rhombencephalon fish05
-        -- Create duplicate brains for feature sets 
-        -- davinci resolve for video
-        Generate frames for each seizure timstamps 10 sec before and after peak
-        * Add ability to select multiple regions
+        Load new files from Wei
+        Convert inspector settings for framerate and nbrFrames to show into menupanel
         Set views to show feature
+        View name shown in viewport ui overlay
+        Set colour of endMarker to different to start marker (gray?)
+    Later us:
         Set view to show feature set or all neurons from IDE
         Split filtered and all (two brains and 6 cameras) ShowAllExcitedNeurons();
         Signal data isn't binary anymore
         Show region and subregion in seizure details
-        Generate stills for video
-        Navigate to peaks or  Navigate using slider
-        View name shown in viewport ui overlay
         forward and back buttons to 2 secs before start of peak
+        Pause button
     Consider:
         Do each seizure for the same fish, same region have similar patterns
          - python glue together 6 seizures to compare
@@ -49,6 +45,14 @@ public class LoadFishData : MonoBehaviour
         Show time stamp in seizure details
         Show tail movement video synced to seizure timestamp
     Done:
+        Generate stills for video
+        Navigate to peaks or  Navigate using slider
+        * Bug Telencephalon fish14
+        * Bug Rhombencephalon fish05
+        -- Create duplicate brains for feature sets 
+        -- davinci resolve for video
+        Generate frames for each seizure timstamps 10 sec before and after peak
+        * Add ability to select multiple regions
         3 views
         Revamped csv position data file
         Show views
@@ -79,6 +83,10 @@ public class LoadFishData : MonoBehaviour
     [Header("Animation")]
     [Tooltip("The time interval between each step in the seizure data animation")]
     public float animationStepInterval = 0.001f;
+
+    [Tooltip("Number of frames to export from marker timestamp")]
+    public int nbrFrames = 300;
+
     [Tooltip("Start position of line graph showing total signal for timestamp")]
     public Vector3 szLeftPos;
     [Tooltip("End position of line graph showing total signal for timestamp")]
@@ -92,7 +100,7 @@ public class LoadFishData : MonoBehaviour
     public Material dullMaterial;
     [Tooltip("Size of inactive neurons")]
     [Range(1.0f, 10.0f)]
-    public float inactiveNeuronSize = 2.0f;
+    public float inactiveNeuronSize = 3.0f;
 
     [Tooltip("Size of active neurons")]
     [Range(1.0f, 10.0f)]
@@ -153,6 +161,7 @@ public class LoadFishData : MonoBehaviour
 
     public GameObject timelineMarkerPrefab;
     private GameObject timelineMarker;
+    private GameObject endTimelineMarker;
     private List<Vector3> timelinePoints = new List<Vector3>();
 
     private GameObject parentLabel; // Parent object for all labels
@@ -188,7 +197,6 @@ public class LoadFishData : MonoBehaviour
 
         BrainData thisBrain = LoadAllNeuronData(postionsFile, "Brain0");
         brains.Add(thisBrain);
-        // dodge debug of bounds calculation
 
         List<string> regionNames = thisBrain.regions.Keys.ToList();
 
@@ -208,7 +216,7 @@ public class LoadFishData : MonoBehaviour
 
         cameraHandler.SetupMainCameraView(thisBrain.bounds.center, thisBrain.bounds.extents.magnitude);
         // build up the view of brain, region by region
-        StartCoroutine(ShowRegionsStepByStep(0.5f, thisBrain)); // Enables each region every .5 seconds
+        StartCoroutine(ShowRegionsStepByStep(animationStepInterval, thisBrain)); // Enables each region every .5 seconds
         statusMessage.text = "Select a region to see neurons";
 
     }
@@ -245,8 +253,8 @@ public class LoadFishData : MonoBehaviour
         if (!string.IsNullOrEmpty(selectedFish) && !string.IsNullOrEmpty(selectedRegion))
         {
             GetSelectedSeizureData(selectedRegion, selectedFish);
-            statusMessage.text = $"Fish selected: {selectedFish}, Region selected: {selectedRegion}, now creating seizure line";
-            uiHandler.EnableActionButton();
+            statusMessage.text = $"Fish selected: {selectedFish}, Region selected: {selectedRegion}, now loading seizure file";
+            // uiHandler.EnableActionButton();
         }
     }
 
@@ -268,15 +276,17 @@ public class LoadFishData : MonoBehaviour
         cameraHandler.PositionCameras(region.bounds.center, region.bounds.extents.magnitude);
         cameraHandler.SetupViewports();
 
+
         selectedRegion = regionName;
         statusMessage.text = $"Region selected: {regionName}";
 
-        // if (!string.IsNullOrEmpty(selectedFish) && !string.IsNullOrEmpty(selectedRegion))
-        // {
-        //     Debug.Log("Both fish and region selected, now recreating seizure line");
-        //     GetSelectedSeizureData(selectedRegion, selectedFish);
-        //     uiHandler.EnableActionButton();
-        // }
+        // Make seizure line if seizure data is loaded for this fish and region
+        if (!string.IsNullOrEmpty(selectedFish) && !string.IsNullOrEmpty(selectedRegion))
+        {
+            GetSelectedSeizureData(selectedRegion, selectedFish);
+            statusMessage.text = $"Fish selected: {selectedFish}, Region selected: {selectedRegion}, now loading seizure file";
+            // uiHandler.EnableActionButton();
+        }
     }
 
     IEnumerator ShowRegionsStepByStep(float delaySeconds, BrainData brain)
@@ -398,7 +408,7 @@ public class LoadFishData : MonoBehaviour
                 {
                     progressBarFill.fillAmount = (float)progress / maxProgress;
                     progressBarText.text = $"{(int)((float)progress / maxProgress * 100)}%";
-                    Debug.Log($"Processed {rowIdx}/{numRows} rows, progress: {progress}/{maxProgress}");
+                    // Debug.Log($"Processed {rowIdx}/{numRows} rows, progress: {progress}/{maxProgress}");
                     yield return null; // Yield to avoid freezing
                 }
             }
@@ -414,8 +424,9 @@ public class LoadFishData : MonoBehaviour
         progressBarFill.fillAmount = (float)progress / maxProgress;
         progressBarText.text = $"{(int)((float)progress / maxProgress * 100)}%";
         progressBar.SetActive(false);
-        Debug.Log($"Processed {rowIdx}/{numRows} rows, progress: {progress}/{maxProgress}");
-
+        uiHandler.EnableActionButtons();
+        // Debug.Log($"Processed {rowIdx}/{numRows} rows, progress: {progress}/{maxProgress}");
+        statusMessage.text = $"Seizure data loaded for fish: {selectedFish}, region: {selectedRegion} with {numRows} rows and {numCols} signal columns. Now creating seizure line."; 
         yield return StartCoroutine(MakeSeizureLine(regionName));
         yield return null;
     }
@@ -428,6 +439,9 @@ public class LoadFishData : MonoBehaviour
             Debug.Log("Seizure data for fish " + fishName + " already loaded");
             return;
         }
+        
+        uiHandler.DisableActionButtons();
+
         RegionData region = brains[0].regions[regionName];
         Debug.Log($"Brain[0] has {brains[0].neurons.Count} neurons");
         Debug.Log($"Region {region.name} has {region.neurons.Count} neurons");
@@ -447,7 +461,6 @@ public class LoadFishData : MonoBehaviour
             Destroy(szLine);
         }
         szLine = new GameObject("SeizureLine");
-        statusMessage.text = $"Creating seizure line for fish: {selectedFish}, region: {selectedRegion}";
 
         MeshRenderer mRenderer = szLine.AddComponent<MeshRenderer>();
         mRenderer.material = glowMaterial;
@@ -489,7 +502,7 @@ public class LoadFishData : MonoBehaviour
             point.y = szLeftPos.y - markerSpacer;
             timelinePoints.Add(point);
 
-            // Add axis marker every 200 timestamps
+            // Add axis marker every 500 timestamps
             if (i % 500 == 0)
             {
                 // Axis arker position: fixed y below the line  
@@ -534,19 +547,36 @@ public class LoadFishData : MonoBehaviour
             darkLine.SetPosition(1, new Vector3(szRightPos.x, szRightPos.y - markerSpacer, szRightPos.z));
         }
 
+        // Create timeline markers
+        startTimestamp = 0;
         if (timelineMarker == null)
         {
             timelineMarker = Instantiate(timelineMarkerPrefab);
             timelineMarker.GetComponent<DraggableObject>().onDrag.AddListener(OnMarkerDrag);
         }
-        timelineMarker.transform.position = timelinePoints[0];
-        //timelineMarker.SetActive(false); // Hide initially
+        timelineMarker.transform.position = timelinePoints[startTimestamp];
+
+
+        endTimestamp = Math.Min(startTimestamp + nbrFrames, timelinePoints.Count - 1);
+        if (endTimelineMarker == null)
+        {
+            endTimelineMarker = Instantiate(timelineMarkerPrefab);
+            Renderer tmRenderer = timelineMarker.GetComponent<Renderer>();
+            if (tmRenderer != null)
+            {
+                tmRenderer.material.color = Color.grey;
+            }
+            FreezeEndMarker(endTimestamp);
+        };
+
+        uiHandler.EnableActionButtons();
+        statusMessage.text = $"Move timestamp marker in seizure line graph above then click 'Show Seizure Data' to start animation.";
 
         yield return null;
     } // end of MakeSeizureLine
 
 
-    public void ShowSeizureData(int pStartTimestamp = -1, int duration = -1)
+    public void ShowSeizureData()
     {
         if (brains[0].regions[selectedRegion].sumActivities[selectedFish].Count < 1f)
         {
@@ -557,10 +587,24 @@ public class LoadFishData : MonoBehaviour
         // make the menu ui inactive
         uiHandler.HideMenuPanel();
 
-        if (pStartTimestamp >= 0)
-            startTimestamp = pStartTimestamp;
         // Start stepping through the seizure data
-        StartCoroutine(StepThroughSeizureData(startTimestamp, duration));
+
+        int markerTimestamp = currentSignalTimestamp >= 0 ? currentSignalTimestamp : 0;
+        StartCoroutine(StepThroughSeizureData(markerTimestamp));
+    }
+
+    public void MakeSeizureFrames()
+    {
+        if (brains[0].regions[selectedRegion].sumActivities[selectedFish].Count < 1f)
+        {
+            statusMessage.text = "No seizure data loaded. Please load a fish file first.";
+            return;
+        }
+        // make the menu ui inactive
+        uiHandler.HideMenuPanel();
+
+        int markerTimestamp = currentSignalTimestamp >= 0 ? currentSignalTimestamp : 0;
+        StartCoroutine(ExportSignalDataFrames(selectedFish, markerTimestamp));
     }
 
     public void OnMarkerDrag()
@@ -591,6 +635,17 @@ public class LoadFishData : MonoBehaviour
             if (closestIdx != -1 && closestIdx != currentSignalTimestamp)
             {
                 Debug.Log($"Marker dragged to timestamp {closestIdx}");
+                if (startTimestamp != math.min(endTimestamp - nbrFrames, closestIdx))
+                {
+                    // deactivate all active neurons first
+                    foreach (NeuronData neuron in activeNeurons)
+                    {
+                        neuron.Deactivate();
+                    }
+                    activeNeurons.Clear();
+                }
+
+
                 startTimestamp = closestIdx;
                 currentSignalTimestamp = closestIdx;
                 uiHandler.startTimeInput.text = closestIdx.ToString();
@@ -605,31 +660,20 @@ public class LoadFishData : MonoBehaviour
                     neuron.SetActiveState(selectedFish, closestIdx);
                 }
 
+                endTimestamp = Math.Min(startTimestamp + nbrFrames, timelinePoints.Count - 1);
+                ResetEndMarker(endTimestamp);
             }
         }
     }
 
-    IEnumerator StepThroughSeizureData(int startTimestamp, int duration = -1, int skipSize = 1, int batchSize = 100)
+    IEnumerator StepThroughSeizureData(int startTimestamp, int skipSize = 1, int batchSize = 100)
     {
         int numNeurons = brains[0].regions[selectedRegion].neurons.Count;
         int numTimestamps = (int)brains[0].regions[selectedRegion].sumActivities[selectedFish].Count;
 
         Debug.Log($"Stepping through seizure data for fish {selectedFish} in region {selectedRegion}. Num Neurons: {numNeurons}, Num Timestamps: {numTimestamps}");
-        // set all neurons to dull material first
-        foreach (NeuronData neuronObj in brains[0].regions[selectedRegion].neurons)
-        {
-            if (neuronObj.gameObject != null)
-            {
-                // neuronObj.renderer.material = dullMaterial;
-                neuronObj.Deactivate();
-            }
-        }
 
-        int endTimestamp = numTimestamps;
-        if (duration > 0)
-        {
-            endTimestamp = Math.Min(startTimestamp + duration, numTimestamps);
-        }
+        int endTimestamp = Math.Min(startTimestamp + nbrFrames, numTimestamps);
 
         for (int col = startTimestamp; col < endTimestamp; col += skipSize)
         {
@@ -640,36 +684,114 @@ public class LoadFishData : MonoBehaviour
             // statusMessage.text = $"Stepping through timestamp: {col + 1}/{numTimestamps}";
 
             currentSignalTimestamp = col;
-            int neuronsProcessed = 0;
-            foreach (NeuronData neuron in activeNeurons)
-            {
-                neuron.Deactivate();
-            }
-
-            activeNeurons = brains[0].regions[selectedRegion].GetActiveNeurons(selectedFish, col);
-            foreach (NeuronData neuron in activeNeurons)
-            {
-                neuron.SetActiveState(selectedFish, col);
-                neuronsProcessed += 1;
-                if (neuronsProcessed % batchSize == 0)
-                {
-                    yield return null; // Yield to avoid freezing
-                }
-            }
+            //int neuronsProcessed = 0;
+            UpdateNeuronStates(col, selectedFish, selectedRegion);
 
             // Move timeline marker
             if (timelineMarker != null && timelinePoints.Count > col)
             {
-                Debug.Log($"Moving timeline marker to position for timestamp {col}");
                 timelineMarker.transform.position = timelinePoints[col];
             }
 
             // yield return new WaitForSeconds(animationStepInterval);
             yield return null;
         }
-        currentSignalTimestamp = -1;
+        endTimestamp = Mathf.Min(currentSignalTimestamp + nbrFrames, numTimestamps-1);
+        ResetEndMarker(endTimestamp);
+        uiHandler.ShowMenuPanel();
+        }
+
+
+    private void UpdateNeuronStates(int timestamp, string fishName, string regionName)
+    {
+        // Deactivate all neurons first
+        foreach (NeuronData neuron in brains[0].regions[regionName].neurons)
+        {
+            neuron.Deactivate();
+        }
+
+        // Activate neurons for this timestamp
+        var activeNeurons = brains[0].regions[regionName].GetActiveNeurons(fishName, timestamp);
+        foreach (NeuronData neuron in activeNeurons)
+        {
+            neuron.SetActiveState(fishName, timestamp);
+        }
+    }
+
+    void FreezeEndMarker(int endTimestamp = -1)
+    {
+        if (endTimelineMarker != null)
+        {
+            var draggable = endTimelineMarker.GetComponent<DraggableObject>();
+            if (draggable != null)
+            {
+                // disable dragging
+                draggable.enabled = false;
+            }
+        }
+        endTimelineMarker.transform.position = timelinePoints[endTimestamp];
+    }
+
+    void ResetEndMarker(int endTimestamp = -1)
+    {
+        if (endTimelineMarker != null)
+        {
+            var draggable = endTimelineMarker.GetComponent<DraggableObject>();
+            if (draggable != null)
+            {
+                // enable dragging
+                //draggable.enabled = true;
+            }
+        }
+        endTimelineMarker.transform.position = timelinePoints[endTimestamp];
+    }
+
+    IEnumerator ExportSignalDataFrames(string fishID, int markerTimestamp)
+    {
+        int numNeurons = brains[0].regions[selectedRegion].neurons.Count;
+        int numTimestamps = (int)brains[0].regions[selectedRegion].sumActivities[selectedFish].Count;
+
+        int startFrame = Mathf.Clamp(markerTimestamp, 0, numTimestamps - 1);
+        int endFrame = Mathf.Min(startFrame + nbrFrames, numTimestamps);
+        float lastTime;
+
+        //FreezeEndMarker();
+
+        string regionID = selectedRegion.Substring(0, Math.Min(5, selectedRegion.Length)); // first 5 letters of region name
+        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+        string folder = Path.Combine(projectRoot, "SignalDataFrames/Signals_" + fishID + "_" + regionID);
+        if (Directory.Exists(folder))
+            // delete existing folder and contents if previosuly created
+            Directory.Delete(folder, true);
+        Directory.CreateDirectory(folder);
+
+
+        for (int col = startFrame; col < endFrame; col++)
+        {
+            lastTime = Time.time;
+            currentSignalTimestamp = col;
+
+            // Move timeline marker
+            if (timelineMarker != null && timelinePoints.Count > col)
+            {
+                timelineMarker.transform.position = timelinePoints[col];
+            }
+
+            UpdateNeuronStates(col, fishID, selectedRegion);
+            yield return new WaitForEndOfFrame();
+            string framefile = Path.Combine(folder, $"{fishID}_{regionID}_{col:D05}.png");
+            ScreenCapture.CaptureScreenshot(framefile);
+            yield return new WaitForSeconds(0.01f);
+        }
+
+        Debug.Log($"Frames exported to {folder}");
+
+
+        int endTimestamp = Mathf.Min(currentSignalTimestamp + nbrFrames, numTimestamps-1);
+        ResetEndMarker(endTimestamp);
         uiHandler.ShowMenuPanel();
     }
+
 
     public BrainData LoadAllNeuronData(string postionsFile, string brainName, bool useSWCIndex = true)
     {
@@ -791,8 +913,7 @@ public class LoadFishData : MonoBehaviour
                 newNeuron.inactiveNeuronSize = inactiveNeuronSize;
                 newNeuron.transform.SetParent(region.gameObject.transform, false);
 
-                // newNeuron.InitNeuron(sphereMesh, dullMaterial);
-                newNeuron.InitNeuron(sphereMesh, glowMaterial);
+                newNeuron.InitNeuron(sphereMesh, glowMaterial, activeNeuronSize);
 
                 for (var fi = featureSetStartIndex; fi < values.Length; fi++)
                 {

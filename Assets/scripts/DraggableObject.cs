@@ -21,6 +21,12 @@ public class DraggableObject : MonoBehaviour
         renderer = GetComponent<Renderer>();
         originalColor = GetComponent<Renderer>().material.color;
     }
+
+    public void SetColour(Color c)
+    {
+        renderer.material.color = c;
+    }
+
     void Update()
     {
         Vector3 pos = Mouse.current.position.ReadValue();

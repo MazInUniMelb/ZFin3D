@@ -7,34 +7,33 @@ namespace BrainComponents
 {
     public class FeatureData : MonoBehaviour
     {
-        private Dictionary<string, int> featureDict = new Dictionary<string, int>();
-        private HashSet<string> activeFeatures = new HashSet<string>();
-        public Color color;
+        //private Dictionary<string, int> featureDict = new Dictionary<string, int>();
+        public HashSet<string> activeFeatures = new HashSet<string>();
 
-        public int GetFeature(string featureName)
+        public bool IsFeatureActive(string featureName)
         {
-            return featureDict[featureName];
+            return activeFeatures.Contains(featureName);
         }
+        //     return featureDict[featureName];
+        // }
 
-        private void RefreshActiveFeatures()
-        {
-            activeFeatures.Clear();
-            foreach (var kvp in featureDict)
-            {
-                if (kvp.Value > 0)
-                {
-                    activeFeatures.Add(kvp.Key);
-                }
-            }
-        }
+        // private void RefreshActiveFeatures()
+        // {
+        //     activeFeatures.Clear();
+        //     foreach (var kvp in featureDict)
+        //     {
+        //         if (kvp.Value > 0)
+        //         {
+        //             activeFeatures.Add(kvp.Key);
+        //         }
+        //     }
+        // update featursetDict?
+        // update colour dictionary?
+        // }
 
-        public void AddFeature(string featureName, int value = 0)
+        public void AddFeature(string featureName)
         {
-            featureDict[featureName] = value;
-            if (value > 0)
-            {
-                activeFeatures.Add(featureName);
-            }
+            activeFeatures.Add(featureName);
         }
     }
 

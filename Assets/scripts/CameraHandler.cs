@@ -11,6 +11,10 @@ public class CameraHandler : MonoBehaviour
     public Camera ventralCamera;
     public Camera sagittalCamera;
 
+    [Header("FeatureSet View")]
+    public Camera featureSetCamera;
+    public bool featureSetViewEnabled = true;
+
     //[Header("Troubleshooting")]
 
     private float FOVdefault = 45f;
@@ -30,6 +34,7 @@ public class CameraHandler : MonoBehaviour
         dorsalCamera.enabled = false;
         ventralCamera.enabled = false;
         sagittalCamera.enabled = false;
+        featureSetCamera.enabled = false;
         // Optionally, set mainCamera to full screen at start
         mainCamera.rect = new Rect(0f, 0f, 1f, 1f);
     }
@@ -42,11 +47,22 @@ public class CameraHandler : MonoBehaviour
         dorsalCamera.depth = 2;
         ventralCamera.depth = 3;
         sagittalCamera.depth = 4;
+        featureSetCamera.depth = 5;
 
         lineGraphCamera.enabled = true;
         dorsalCamera.enabled = true;
         ventralCamera.enabled = true;
         sagittalCamera.enabled = true;
+        if (featureSetViewEnabled) 
+            {
+            featureSetCamera.enabled = true; 
+            dorsalCamera.enabled = false;
+            }
+        else
+            {
+            featureSetCamera.enabled = false;
+            dorsalCamera.enabled = true;
+             }
 
         // Main camera: left 50% of screen
         mainCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
@@ -56,9 +72,13 @@ public class CameraHandler : MonoBehaviour
         lineGraphCamera.rect = new Rect(0f, 0.8f, 0.5f, 0.2f);
         lineGraphCamera.clearFlags = CameraClearFlags.Depth;
 
-        // Dorsal: top third of right 50%
-        dorsalCamera.rect = new Rect(0.5f, 2f/3f, 0.5f, 1f/3f);
+        // Dorsal feature set view: top third of right 50%
+        dorsalCamera.rect = new Rect(0.5f, 0.66f, 0.5f, 0.34f);
         dorsalCamera.clearFlags = CameraClearFlags.Depth;
+
+        // Feature set view: top third of right 50%
+        featureSetCamera.rect = new Rect(0.5f, 2f/3f, 0.5f, 1f/3f);
+        featureSetCamera.clearFlags = CameraClearFlags.Depth;
 
         // Ventral: middle third of right 50%
         ventralCamera.rect = new Rect(0.5f, 1f/3f, 0.5f, 1f/3f);
@@ -102,7 +122,36 @@ public class CameraHandler : MonoBehaviour
         return centerPoint;
     }
 
+    public Vector3 PositionFeatureSetCamera(Vector3 centerPos, float extent)
+        {
+            if (centerPos == null)
+            {
+                Debug.LogWarning("No centroid position provided for camera positioning.");
+                return Vector3.zero;
+            }
 
+            Debug.Log($"Positioning feature set camera to center: {centerPos}, extent: {extent}");
+
+            // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)
+            Vector3 mainViewDir = Vector3.back;      // -Z
+
+            // Use the extent to set the distance
+            float minDistance = 100f; // Set based on your scene scale
+            float maxDistance = 1500f;
+            float distance = Mathf.Clamp(extent * 1.2f, minDistance, maxDistance);
+
+            // Feature set camera
+            // todo move main camera slowly to new position
+            Vector3 newCameraPos = centerPos + mainViewDir * distance;
+
+            //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
+            featureSetCamera.transform.position = newCameraPos;
+            featureSetCamera.transform.LookAt(centerPos);
+            featureSetCamera.fieldOfView = FOVzoomedout;
+
+            return centerPoint;
+        }
+    
     public Vector3 PositionCameras(Vector3 centerPos, float extent)
     {
         if (centerPos == null)
@@ -137,6 +186,11 @@ public class CameraHandler : MonoBehaviour
         dorsalCamera.transform.position = centerPos + mainViewDir * distance;
         dorsalCamera.transform.LookAt(centerPos);
         dorsalCamera.fieldOfView = FOVdefault;
+
+        // Featureset camera
+        featureSetCamera.transform.position = centerPos + mainViewDir * distance;
+        featureSetCamera.transform.LookAt(centerPos);
+        featureSetCamera.fieldOfView = FOVdefault;
 
         // Move ventral camera below the region, but keep X and Z at center
         ventralCamera.transform.position = new Vector3(centerPos.x, centerPos.y - distance, centerPos.z);

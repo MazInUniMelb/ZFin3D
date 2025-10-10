@@ -7,6 +7,7 @@ namespace BrainComponents
     public class BrainData : MonoBehaviour
     {
         public HashSet<string> activeFeatureSets = new HashSet<string>();
+    
         public Dictionary<string, RegionData> regions = new Dictionary<string, RegionData>();
         public List<NeuronData> neurons = new List<NeuronData>();
         public Bounds bounds = new Bounds();

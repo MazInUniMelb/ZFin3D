@@ -22,8 +22,10 @@ public class LoadFishData : MonoBehaviour
     This neuronal data is captured by the Scott Lab at the University of Melbourne, Australia
 
     Todos: 
+        Show featureset only (Brain1)
         Load new files from Wei
         Convert inspector settings for framerate and nbrFrames to show into menupanel
+        - show start + end timestamps as marker is moved
         Set views to show feature
         View name shown in viewport ui overlay
         Set colour of endMarker to different to start marker (gray?)
@@ -150,6 +152,14 @@ public class LoadFishData : MonoBehaviour
         { "None", new Color(0.4588f, 0.4392f, 0.7019f) } // Default to dark RGB: (117,112,179)
     };
 
+    private Dictionary<string, Color> featureColoursDict = new Dictionary<string, Color>();
+    private Dictionary<int, Color> featuresetColourList = new Dictionary<int, Color>
+    {
+        { 1, Color.magenta }, // Pink
+        { 2, Color.blue },    // blue
+        { 3, Color.green },   // Green
+        { 4, Color.red }      // Red
+    };
 
     private Dictionary<string, string> fishFileDict = new Dictionary<string, string>();
 
@@ -197,6 +207,12 @@ public class LoadFishData : MonoBehaviour
 
         BrainData thisBrain = LoadAllNeuronData(postionsFile, "Brain0");
         brains.Add(thisBrain);
+
+        if (cameraHandler.featureSetViewEnabled)
+        {
+            BrainData newBrain = CloneFeatureSetNeurons(thisBrain, "Brain1");
+            brains.Add(newBrain);
+        }
 
         List<string> regionNames = thisBrain.regions.Keys.ToList();
 
@@ -264,7 +280,7 @@ public class LoadFishData : MonoBehaviour
         // Set line color from regionColours dictionary
         Color regionColor = regionColours.TryGetValue(regionName, out Color c) ? c : Color.white;
 
-        // Update the camera position based on the new region for Brain0
+
         foreach (var brain in brains)
         {
             foreach (var brainRegion in brain.regions.Values)
@@ -272,10 +288,17 @@ public class LoadFishData : MonoBehaviour
                 brainRegion.gameObject.SetActive(brainRegion.name == regionName);
             }
         }
+
+        // Update the camera position based on the new region for Brain0
         RegionData region = brains[0].regions[regionName];
         cameraHandler.PositionCameras(region.bounds.center, region.bounds.extents.magnitude);
+        // if featureSetViewEnabled, show Brain1 (featureset) in viewport top right (instead of dorsal)
+        if (cameraHandler.featureSetViewEnabled)
+        {
+            RegionData region1 = brains[1].regions[regionName];
+            cameraHandler.PositionFeatureSetCamera(region1.bounds.center, region1.bounds.extents.magnitude);
+        }
         cameraHandler.SetupViewports();
-
 
         selectedRegion = regionName;
         statusMessage.text = $"Region selected: {regionName}";
@@ -413,6 +436,23 @@ public class LoadFishData : MonoBehaviour
                 }
             }
         }
+
+        // for testing only, get activated nodes for fish05 at timestamp 2751
+        // activeNeurons = (brains[0].regions[selectedRegion].GetActiveNeurons(selectedFish, 2751));
+        // // get list of indexes of active neurons
+        // List<int> activeNeuronIndexes = new List<int>();
+        // string ixList = "[";
+        // foreach (var neuron in activeNeurons)
+        // {
+        //     ixList += neuron.neuronIdx.ToString();
+        //     ixList += ", ";
+        // }
+        // ixList += "]";
+        // Debug.Log($"At timestamp 2751, found {activeNeurons.Count} active neurons");
+        // Debug.Log(ixList);
+        // end of testing only
+        
+
         Debug.Log("Signal data loaded.");
         foreach (var brain in brains)
         {
@@ -609,8 +649,10 @@ public class LoadFishData : MonoBehaviour
 
     public void OnMarkerDrag()
     {
+        Debug.Log("Marker dragged");
         if (timelineMarker != null && timelinePoints.Count > 0)
         {
+  
             var markerX = timelineMarker.transform.position.x;
             var firstTimestampX = timelinePoints[0].x;
             var lastTimestampX = timelinePoints[timelinePoints.Count - 1].x;
@@ -635,15 +677,17 @@ public class LoadFishData : MonoBehaviour
             if (closestIdx != -1 && closestIdx != currentSignalTimestamp)
             {
                 Debug.Log($"Marker dragged to timestamp {closestIdx}");
-                if (startTimestamp != math.min(endTimestamp - nbrFrames, closestIdx))
-                {
-                    // deactivate all active neurons first
-                    foreach (NeuronData neuron in activeNeurons)
-                    {
-                        neuron.Deactivate();
-                    }
-                    activeNeurons.Clear();
-                }
+
+                
+                // if (startTimestamp != math.min(endTimestamp - nbrFrames, closestIdx))
+                // {
+                //     // deactivate all active neurons first
+                //     foreach (NeuronData neuron in activeNeurons)
+                //     {
+                //         neuron.Deactivate();
+                //     }
+
+                // }
 
 
                 startTimestamp = closestIdx;
@@ -654,7 +698,11 @@ public class LoadFishData : MonoBehaviour
                     neuron.Deactivate();
                 }
 
-                activeNeurons = brains[0].regions[selectedRegion].GetActiveNeurons(selectedFish, closestIdx);
+                activeNeurons.Clear();
+                foreach (BrainData brain in brains)
+                {
+                    activeNeurons.AddRange(brain.regions[selectedRegion].GetActiveNeurons(selectedFish, closestIdx));
+                }
                 foreach (NeuronData neuron in activeNeurons)
                 {
                     neuron.SetActiveState(selectedFish, closestIdx);
@@ -704,14 +752,18 @@ public class LoadFishData : MonoBehaviour
 
     private void UpdateNeuronStates(int timestamp, string fishName, string regionName)
     {
-        // Deactivate all neurons first
-        foreach (NeuronData neuron in brains[0].regions[regionName].neurons)
+        foreach (NeuronData neuron in activeNeurons)
         {
             neuron.Deactivate();
         }
+        activeNeurons.Clear();
 
-        // Activate neurons for this timestamp
-        var activeNeurons = brains[0].regions[regionName].GetActiveNeurons(fishName, timestamp);
+        foreach (BrainData brain in brains)
+        {
+            // Activate neurons for this timestamp
+            activeNeurons.AddRange(brain.regions[regionName].GetActiveNeurons(fishName, timestamp));
+
+        }
         foreach (NeuronData neuron in activeNeurons)
         {
             neuron.SetActiveState(fishName, timestamp);
@@ -806,6 +858,9 @@ public class LoadFishData : MonoBehaviour
             return null;
         }
 
+        // delete this, for testing only
+        List<int> xtraIdx = new List<int> {6418, 6903, 6992, 7008, 7090, 7350, 7361, 7398, 7411, 7465, 7954, 8260, 8308, 8392, 8942, 8947, 10623, 11918, 12484, 12595, 12767, 12841, 12846, 13534, 13790, 13825, 14009, 15754, 16829, 16938 };
+
         Debug.Log("Loading file: " + fullPath);
         StreamReader reader = new StreamReader(fullPath);
 
@@ -834,16 +889,13 @@ public class LoadFishData : MonoBehaviour
         // Feature sets start at index 7
         int featureSetStartIndex = 7;
         int featureSetCount = headers.Length - featureSetStartIndex;
-        Debug.Log($"Found {featureSetCount} feature sets. Feature set columns: {string.Join(", ", headers.Skip(featureSetStartIndex))}");
+        HashSet<string> featureSetNames = System.Linq.Enumerable.ToHashSet(headers.Skip(featureSetStartIndex));
+        Debug.Log($"Found {featureSetCount} feature sets. Feature set names are: {string.Join(", ", featureSetNames)}");
 
-
-        // create new brain (wholeBrain) to contain all neurons
-        // BrainData defaultBrain = new BrainData
-        // {
-        //     name = brainName
-        // };
         GameObject obj = new GameObject(brainName);
         BrainData defaultBrain = obj.AddComponent<BrainData>();
+        defaultBrain.activeFeatureSets = featureSetNames;
+        SetupFeatureColours(featureSetNames);
 
         string line;
         int lineIdx = 0;
@@ -918,7 +970,16 @@ public class LoadFishData : MonoBehaviour
                 for (var fi = featureSetStartIndex; fi < values.Length; fi++)
                 {
                     int.TryParse(values[1], out int neuronFeatureValue);
-                    newNeuron.featureData.AddFeature(headers[fi], neuronFeatureValue);
+                    if (neuronFeatureValue != 0)
+                        newNeuron.featureData.AddFeature(headers[fi]);
+                    
+                    // delete this, for testing only
+                    if (xtraIdx.Contains(swcIndex))
+                    {
+                        newNeuron.featureData.AddFeature(headers[fi]);
+                    }
+                    
+                    // set colour from tobecreated feature colour dictionary
                 }
 
                 defaultBrain.AddNeuron(newNeuron);
@@ -935,6 +996,123 @@ public class LoadFishData : MonoBehaviour
         return defaultBrain;
     } // end of LoadAllNeuronData
 
+
+    private BrainData CloneFeatureSetNeurons(BrainData thisBrain, string brainName)
+    {
+        Debug.Log("Cloning neurons with featuresets from brain: " + thisBrain.name);
+        GameObject obj = new GameObject(brainName);
+        BrainData newBrain = obj.AddComponent<BrainData>();
+
+        // Add regions from thisBrain to newBrain
+        foreach (var regionEntry in thisBrain.regions)
+        {
+            string regionName = regionEntry.Key;
+            RegionData region = regionEntry.Value;
+            // Create a new GameObject for the region
+            GameObject regionObj = new GameObject(regionName);
+            RegionData newRegion = regionObj.AddComponent<RegionData>();
+            newRegion.name = regionName;
+            newRegion.color = region.color;
+            newRegion.brain = newBrain;
+            newBrain.regions[regionName] = newRegion;
+            newRegion.transform.SetParent(newBrain.transform, false);
+            newRegion.gameObject.SetActive(false); // start with all regions inactive
+        }
+
+        HashSet<string> allFeatureSets = thisBrain.activeFeatureSets;
+        Debug.Log($"The feature sets are: {string.Join(", ", allFeatureSets)}");
+        Color nColour;
+
+        // Add only the featureset neurons from thisBrain to newBrain
+        foreach (NeuronData neuron in thisBrain.neurons)
+        {
+            if (neuron.featureData != null)
+            {
+                //Debug.Log($"Neuron {neuron.neuronIdx} has featureset data {neuron.featureData}");
+                if (neuron.featureData.activeFeatures.Count > 0)
+                {
+                    Debug.Log($"Neuron {neuron.neuronIdx} has featureset data {string.Join(", ", neuron.featureData.activeFeatures)}");
+
+                    // nColour = GetFeatureColour(neuron.featureData.activeFeatures);
+                    nColour = Color.magenta;
+
+                    // Clone the neuron gameobject
+                    GameObject original = neuron.gameObject;
+                    GameObject neuronObj = Instantiate(original);
+                    NeuronData newNeuron = neuronObj.GetComponent<NeuronData>();
+                    newNeuron.color = nColour;
+                    newNeuron.brain = newBrain;
+                    neuronObj.name = original.name; // remove (Clone) from name
+                    Vector3 newPos = neuron.originalPosition;
+                    newPos.x += distBtwnBrains;
+                    newNeuron.originalPosition = newPos;
+
+                    newNeuron.transform.SetParent(newBrain.regions[neuron.region.name].gameObject.transform, false);
+                    newNeuron.InitNeuron(sphereMesh, glowMaterial, activeNeuronSize);
+
+                    newBrain.AddNeuron(newNeuron);
+                    RegionData thisRegion = newBrain.regions[neuron.region.name];
+                    thisRegion.AddNeuron(newNeuron);
+
+                    // change colour of neuron in Brain0 as well
+                    Renderer nRenderer = neuron.renderer;
+                    nRenderer.material.SetColor("_EmissionColor", nColour);
+                    nRenderer.material.SetColor("_BaseColor", nColour);
+                }
+            }
+        }
+
+        return newBrain;
+
+    }
+    
+    private void SetupFeatureColours(HashSet<string> featureSetNames)
+    {
+        featureColoursDict.Clear();
+        int colourIx = 0;
+        foreach (string feature in featureSetNames)
+        {
+            if (!featureColoursDict.ContainsKey(feature))
+            {
+                // assign a colour from the list
+                Color color = featuresetColourList.ElementAt(colourIx % featuresetColourList.Count).Value;
+                featureColoursDict[feature] = color;
+                colourIx++;
+            }
+        }
+
+        foreach (var kvp in featureColoursDict)
+        {
+            Debug.Log($"Feature: {kvp.Key}, Colour: {kvp.Value}");
+        }
+    }   
+
+    private Color GetFeatureColour(HashSet<string> activeFeatures)
+    {
+        // todo debug, this isn't working 2nd time its called??
+        Color fColour = Color.white;
+        Debug.Log("Getting colour for features: " + string.Join(", ", activeFeatures));
+        if (activeFeatures.Count == 1)
+        {
+            string feature = activeFeatures.First();
+            Debug.Log("Getting colour for feature: " + feature);
+            if (featureColoursDict.ContainsKey(feature))
+            {
+                fColour = featureColoursDict[feature];
+            }
+            else
+            {
+                Debug.LogWarning($"Feature '{feature}' not found in featureColoursDict!");
+                fColour = Color.white;
+            }
+        }
+        else
+        {
+            fColour = Color.Lerp(Color.red, Color.blue, 0.5f); // purple for multiple features
+        }
+        return fColour; 
+    }
+
     private void DeleteLabels(GameObject parentLabel)
     {
         // Find all label objects and destroy them
@@ -943,7 +1121,6 @@ public class LoadFishData : MonoBehaviour
             Destroy(child.gameObject);
         }
     }
-
     private GameObject AddLabel(GameObject parentLabel, string labelText, Vector3 position, bool drawLine = false, Vector3 lineEndPoint = default(Vector3))
     {
 

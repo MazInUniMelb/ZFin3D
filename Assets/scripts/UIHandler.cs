@@ -20,6 +20,8 @@ public class UIHandler : MonoBehaviour
     public Button showSeizureButton;
     [Tooltip("Button to make seizure frames")]
     public Button makeFramesButton;
+    [Tooltip("Button to load all fish seizure files")]
+    public Button loadAllFishButton;
 
     [Tooltip("Input field for start time")]
     public TMP_InputField startTimeInput;
@@ -35,6 +37,7 @@ public class UIHandler : MonoBehaviour
 
         showSeizureButton.onClick.AddListener(OnShowSeizureButtonClicked);
         makeFramesButton.onClick.AddListener(OnMakeFramesButtonClicked);
+        makeFramesButton.onClick.AddListener(OnLoadAllFishClicked);
 
         DisableActionButtons();
 
@@ -117,5 +120,11 @@ public class UIHandler : MonoBehaviour
     {
         Debug.Log("Start making frames");
         loadFishData.MakeSeizureFrames();
+    }
+
+    public void OnLoadAllFishClicked()
+    {
+        Debug.Log("Start showing seizure data");
+        loadFishData.LoadAllFishSeizureData();
     }
 }

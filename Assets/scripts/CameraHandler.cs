@@ -38,7 +38,7 @@ public class CameraHandler : MonoBehaviour
         // Optionally, set mainCamera to full screen at start
         mainCamera.rect = new Rect(0f, 0f, 1f, 1f);
     }
-    public void SetupViewports()
+    public void SetupRegionViewports()
     {
         Debug.Log("Setup viewports");
 
@@ -91,6 +91,27 @@ public class CameraHandler : MonoBehaviour
     }
 
 
+    public void SetupWholeBrainViewports()
+    {
+        Debug.Log("Setup whole brain viewports");
+        mainCamera.depth = 0;
+        featureSetCamera.depth = 5;
+        lineGraphCamera.enabled = true;
+        featureSetCamera.enabled = true; 
+
+        // Main camera: left 50% of screen
+        mainCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
+        mainCamera.clearFlags = CameraClearFlags.Skybox;   
+
+        // Linegraph camera: left 50% of screen, top 20%
+        lineGraphCamera.rect = new Rect(0f, 0.8f, 0.5f, 0.2f);
+        lineGraphCamera.clearFlags = CameraClearFlags.Depth;
+
+        // Feature set view: right 50%
+        featureSetCamera.rect = new Rect(0.5f, 0f, 0.5f, 1f);
+        featureSetCamera.clearFlags = CameraClearFlags.Depth;
+    }
+
     public Vector3 SetupMainCameraView(Vector3 centerPos, float extent)
     {
         if (centerPos == null)
@@ -107,13 +128,13 @@ public class CameraHandler : MonoBehaviour
         // Use the extent to set the distance
         float minDistance = 100f; // Set based on your scene scale
         float maxDistance = 1500f;
-        float distance = Mathf.Clamp(extent*1.2f, minDistance, maxDistance);
+        float distance = Mathf.Clamp(extent * 1.2f, minDistance, maxDistance);
 
         // Main camera
         // todo move main camera slowly to new position
         Vector3 newCameraPos = centerPos + mainViewDir * distance;
         // adjust y axis to be lower becuase whole brain is so much longer than it is wide
-        newCameraPos.y = newCameraPos.y*.4f;
+        newCameraPos.y = newCameraPos.y * .4f;
         //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
         mainCamera.transform.position = newCameraPos;
         mainCamera.transform.LookAt(centerPos);
@@ -152,7 +173,7 @@ public class CameraHandler : MonoBehaviour
             return centerPoint;
         }
     
-    public Vector3 PositionCameras(Vector3 centerPos, float extent)
+    public Vector3 PositionRegionCameras(Vector3 centerPos, float extent)
     {
         if (centerPos == null)
         {
@@ -193,6 +214,7 @@ public class CameraHandler : MonoBehaviour
         featureSetCamera.fieldOfView = FOVdefault;
 
         // Move ventral camera below the region, but keep X and Z at center
+    // AB to do change to above the region
         ventralCamera.transform.position = new Vector3(centerPos.x, centerPos.y - distance, centerPos.z);
         ventralCamera.transform.LookAt(centerPos);
         ventralCamera.fieldOfView = FOVdefault;
@@ -205,6 +227,36 @@ public class CameraHandler : MonoBehaviour
         return centerPoint;
     }
 
+
+    public Vector3 PositionWholeBrainCameras(Vector3 centerPos, float extent)
+    {
+        if (centerPos == null)
+        {
+            Debug.LogWarning("No centroid position provided for camera positioning.");
+            return Vector3.zero;
+        }
+
+        Debug.Log($"Positioning cameras to center: {centerPos}, extent: {extent}");
+
+        // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)
+        Vector3 mainViewDir = Vector3.back;      // -Z
+
+        // Use the extent to set the distance
+        float minDistance = 100f; // Set based on your scene scale
+        float maxDistance = 1200f;
+        float distance = Mathf.Clamp(extent * 2f, minDistance, maxDistance);
+
+        // Main camera
+        // todo move main camera slowly to new position
+        Vector3 newCameraPos = centerPos + mainViewDir * distance;
+        newCameraPos.y = newCameraPos.y*2f;
+        //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
+        mainCamera.transform.position = newCameraPos;
+        mainCamera.transform.LookAt(centerPos);
+        mainCamera.fieldOfView = FOVzoomedout;
+
+        return centerPoint;
+    }
 
     void DrawViewportBorder(Rect rect, Color color)
     {

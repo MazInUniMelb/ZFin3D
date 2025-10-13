@@ -22,6 +22,8 @@ public class LoadFishData : MonoBehaviour
     This neuronal data is captured by the Scott Lab at the University of Melbourne, Australia
 
     Todos: 
+        Middle view (coronal view is dorsal down) - needs to be opposite
+        Rotating brain (brain 2) (whole brain all regions) in maincamera (start with dorsal view)
         Show featureset only (Brain1)
         Load new files from Wei
         Convert inspector settings for framerate and nbrFrames to show into menupanel
@@ -109,6 +111,8 @@ public class LoadFishData : MonoBehaviour
     public float activeNeuronSize = 4.0f;
 
     [Header("Scene References")]
+    [Tooltip("Titles and video viz elements")]
+    public GameObject videoTextElements;
 
     [Tooltip("Reference to the main camera in the scene")]
     public CameraHandler cameraHandler;
@@ -194,6 +198,9 @@ public class LoadFishData : MonoBehaviour
         baseColor = glowMaterial.GetColor("_EmissionColor");
         mutatedColor = glowMaterial.GetColor("_EmissionColor");
         Application.runInBackground = true;
+
+        // set video viz text elements to inactive
+        videoTextElements.SetActive(false);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -208,13 +215,15 @@ public class LoadFishData : MonoBehaviour
         BrainData thisBrain = LoadAllNeuronData(postionsFile, "Brain0");
         brains.Add(thisBrain);
 
-        if (cameraHandler.featureSetViewEnabled)
-        {
-            BrainData newBrain = CloneFeatureSetNeurons(thisBrain, "Brain1");
-            brains.Add(newBrain);
-        }
+        //if (cameraHandler.featureSetViewEnabled)
+        //{
+        BrainData newBrain = CloneFeatureSetNeurons(thisBrain, "Brain1");
+        brains.Add(newBrain);
+        //}
 
         List<string> regionNames = thisBrain.regions.Keys.ToList();
+        // insert "Whole Brain" at start of list
+        regionNames.Insert(0, "Whole Brain");
 
         // set regiondropdown text to 'select region'
         regionNames.Insert(0, "Select Region"); // Add prompt as first item
@@ -276,29 +285,25 @@ public class LoadFishData : MonoBehaviour
 
     public void SetSelectedRegion(string regionName)
     {
-        // DeleteLabels(parentLabel);
-        // Set line color from regionColours dictionary
-        Color regionColor = regionColours.TryGetValue(regionName, out Color c) ? c : Color.white;
-
-
         foreach (var brain in brains)
         {
             foreach (var brainRegion in brain.regions.Values)
             {
-                brainRegion.gameObject.SetActive(brainRegion.name == regionName);
+                brainRegion.gameObject.SetActive(true);
             }
         }
 
-        // Update the camera position based on the new region for Brain0
-        RegionData region = brains[0].regions[regionName];
-        cameraHandler.PositionCameras(region.bounds.center, region.bounds.extents.magnitude);
-        // if featureSetViewEnabled, show Brain1 (featureset) in viewport top right (instead of dorsal)
-        if (cameraHandler.featureSetViewEnabled)
+        if (regionName == "Whole Brain")
         {
-            RegionData region1 = brains[1].regions[regionName];
-            cameraHandler.PositionFeatureSetCamera(region1.bounds.center, region1.bounds.extents.magnitude);
+            ShowWholeBrain();
         }
-        cameraHandler.SetupViewports();
+        else
+        {
+            ShowOneRegion(regionName);
+        }
+        // DeleteLabels(parentLabel);
+        // Set line color from regionColours dictionary
+
 
         selectedRegion = regionName;
         statusMessage.text = $"Region selected: {regionName}";
@@ -310,6 +315,35 @@ public class LoadFishData : MonoBehaviour
             statusMessage.text = $"Fish selected: {selectedFish}, Region selected: {selectedRegion}, now loading seizure file";
             // uiHandler.EnableActionButton();
         }
+    }
+    void ShowWholeBrain()
+    {
+        Debug.Log("Show whole brain");
+
+        // setup cameras for whole brain
+        cameraHandler.PositionWholeBrainCameras(brains[0].bounds.center, brains[0].bounds.extents.magnitude);
+        // todo if featureSetViewEnabled, show Brain1 (featureset) in viewport top right (instead of dorsal)
+        cameraHandler.PositionFeatureSetCamera(brains[1].bounds.center, brains[1].bounds.extents.magnitude);
+        cameraHandler.SetupWholeBrainViewports();
+        
+    }
+    
+    void ShowOneRegion(string regionName)
+    {
+        Color regionColor = regionColours.TryGetValue(regionName, out Color c) ? c : Color.white;
+
+
+
+        // Update the camera position based on the new region for Brain0
+        RegionData region = brains[0].regions[regionName];
+        cameraHandler.PositionRegionCameras(region.bounds.center, region.bounds.extents.magnitude);
+        // if featureSetViewEnabled, show Brain1 (featureset) in viewport top right (instead of dorsal)
+        if (cameraHandler.featureSetViewEnabled)
+        {
+            RegionData region1 = brains[1].regions[regionName];
+            cameraHandler.PositionFeatureSetCamera(region1.bounds.center, region1.bounds.extents.magnitude);
+        }
+        cameraHandler.SetupRegionViewports();
     }
 
     IEnumerator ShowRegionsStepByStep(float delaySeconds, BrainData brain)
@@ -435,23 +469,7 @@ public class LoadFishData : MonoBehaviour
                     yield return null; // Yield to avoid freezing
                 }
             }
-        }
-
-        // for testing only, get activated nodes for fish05 at timestamp 2751
-        // activeNeurons = (brains[0].regions[selectedRegion].GetActiveNeurons(selectedFish, 2751));
-        // // get list of indexes of active neurons
-        // List<int> activeNeuronIndexes = new List<int>();
-        // string ixList = "[";
-        // foreach (var neuron in activeNeurons)
-        // {
-        //     ixList += neuron.neuronIdx.ToString();
-        //     ixList += ", ";
-        // }
-        // ixList += "]";
-        // Debug.Log($"At timestamp 2751, found {activeNeurons.Count} active neurons");
-        // Debug.Log(ixList);
-        // end of testing only
-        
+        }        
 
         Debug.Log("Signal data loaded.");
         foreach (var brain in brains)
@@ -460,6 +478,7 @@ public class LoadFishData : MonoBehaviour
             {
                 region.UpdateMinMax();
             }
+            brain.UpdateMinMax();
         }
         progressBarFill.fillAmount = (float)progress / maxProgress;
         progressBarText.text = $"{(int)((float)progress / maxProgress * 100)}%";
@@ -482,10 +501,15 @@ public class LoadFishData : MonoBehaviour
         
         uiHandler.DisableActionButtons();
 
-        RegionData region = brains[0].regions[regionName];
-        Debug.Log($"Brain[0] has {brains[0].neurons.Count} neurons");
-        Debug.Log($"Region {region.name} has {region.neurons.Count} neurons");
-        Debug.Log("about to load seizure data for fish " + fishName);
+        // if (regionName == "Whole Brain")
+        // {
+
+        // }
+        // else
+        // {
+        //     RegionData region = brains[0].regions[regionName];
+        // }
+
         progressBar.SetActive(true);
         progressBarFill.fillAmount = 0f;
         progressBarText.text = "0%";
@@ -494,7 +518,33 @@ public class LoadFishData : MonoBehaviour
 
     IEnumerator MakeSeizureLine(string regionName)
     {
-        Color regionColor = regionColours[regionName];
+        float minValue = 0f;
+        float maxValue = 0f;
+        int numPoints = 0;
+
+        Dictionary<string, Dictionary<int, float>> allActivities;
+
+        if (regionName == "Whole Brain")
+        {
+            Debug.Log("Show whole brain seizure line ");
+
+            minValue = brains[0].minActivities[selectedFish];
+            maxValue = brains[0].maxActivities[selectedFish];
+            numPoints = (int)brains[0].totalActivityList[selectedFish].Count;
+
+            allActivities = brains[0].totalActivityList;
+        }
+        else
+        {
+
+            Color regionColor = regionColours[regionName];
+
+            minValue = brains[0].regions[regionName].minActivities[selectedFish];
+            maxValue = brains[0].regions[regionName].maxActivities[selectedFish];
+            numPoints = (int)brains[0].regions[regionName].sumActivities[selectedFish].Count;
+
+            allActivities = brains[0].regions[regionName].sumActivities;
+        }
         // Create or clear existing seizure line object
         if (szLine != null)
         {
@@ -514,12 +564,9 @@ public class LoadFishData : MonoBehaviour
 
         float graphHeight = 200f;
 
-        int numPoints = (int)brains[0].regions[regionName].sumActivities[selectedFish].Count;
         Debug.Log($"Creating seizure line with {numPoints} points for fish {selectedFish} in region {regionName}");
         lineRenderer.positionCount = numPoints;
 
-        float minValue = brains[0].regions[regionName].minActivities[selectedFish];
-        float maxValue = brains[0].regions[regionName].maxActivities[selectedFish];
 
         float yPos = szLeftPos.y;
         float markerSpacer = 40f;
@@ -532,7 +579,7 @@ public class LoadFishData : MonoBehaviour
                                                   // show values of szleftpos and szrightpos and t
             float xPos = Mathf.Lerp(szLeftPos.x, szRightPos.x, t);
 
-            float value = brains[0].regions[regionName].sumActivities[selectedFish][i];
+            float value = allActivities[selectedFish][i];
             float scaledValue = (maxValue > minValue)
                 ? ((value - minValue) / (maxValue - minValue)) * graphHeight
                 : 0f;
@@ -618,19 +665,24 @@ public class LoadFishData : MonoBehaviour
 
     public void ShowSeizureData()
     {
-        if (brains[0].regions[selectedRegion].sumActivities[selectedFish].Count < 1f)
-        {
-            statusMessage.text = "No seizure data loaded. Please load a fish file first.";
-            return;
-        }
-
         // make the menu ui inactive
         uiHandler.HideMenuPanel();
 
         // Start stepping through the seizure data
-
         int markerTimestamp = currentSignalTimestamp >= 0 ? currentSignalTimestamp : 0;
         StartCoroutine(StepThroughSeizureData(markerTimestamp));
+    }
+
+    public void LoadAllFishSeizureData()
+    {
+        isPaused = true;
+        uiHandler.ShowMenuPanel();
+        statusMessage.text = "Loading all seizure data files. This will take some time ...";
+
+        foreach (var fishName in fishFileDict.Keys)
+        {
+            GetSelectedSeizureData(selectedRegion, fishName);
+        }
     }
 
     public void MakeSeizureFrames()
@@ -741,8 +793,8 @@ public class LoadFishData : MonoBehaviour
                 timelineMarker.transform.position = timelinePoints[col];
             }
 
-            // yield return new WaitForSeconds(animationStepInterval);
-            yield return null;
+            yield return new WaitForSeconds(animationStepInterval);
+            //yield return null;
         }
         endTimestamp = Mathf.Min(currentSignalTimestamp + nbrFrames, numTimestamps-1);
         ResetEndMarker(endTimestamp);
@@ -760,6 +812,16 @@ public class LoadFishData : MonoBehaviour
 
         foreach (BrainData brain in brains)
         {
+            if (regionName == "Whole Brain")
+            {
+                // Activate neurons for this timestamp
+                activeNeurons.AddRange(brain.GetActiveNeurons(fishName, timestamp));
+            }
+            else
+            {
+                // Activate neurons for this timestamp
+                activeNeurons.AddRange(brain.regions[regionName].GetActiveNeurons(fishName, timestamp));
+            }
             // Activate neurons for this timestamp
             activeNeurons.AddRange(brain.regions[regionName].GetActiveNeurons(fishName, timestamp));
 
@@ -786,16 +848,10 @@ public class LoadFishData : MonoBehaviour
 
     void ResetEndMarker(int endTimestamp = -1)
     {
-        if (endTimelineMarker != null)
-        {
-            var draggable = endTimelineMarker.GetComponent<DraggableObject>();
-            if (draggable != null)
-            {
-                // enable dragging
-                //draggable.enabled = true;
-            }
-        }
-        endTimelineMarker.transform.position = timelinePoints[endTimestamp];
+        if (endTimelineMarker.transform.position == timelinePoints[endTimestamp])
+           endTimelineMarker.transform.position = timelinePoints[0];
+        else
+            endTimelineMarker.transform.position = timelinePoints[endTimestamp];
     }
 
     IEnumerator ExportSignalDataFrames(string fishID, int markerTimestamp)

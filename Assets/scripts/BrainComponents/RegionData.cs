@@ -16,6 +16,11 @@ namespace BrainComponents
         public Dictionary<string, float> minActivities = new Dictionary<string, float>();
         public Dictionary<string, float> maxActivities = new Dictionary<string, float>();
 
+        [Header("Original Transform State")]
+        public Vector3 originalPosition;
+        public Quaternion originalRotation;
+        public Vector3 originalCentroid;
+
         public void UpdateMinMax()
         {
             foreach (var fishName in sumActivities.Keys)
@@ -58,6 +63,19 @@ namespace BrainComponents
                 }
             }
             return activeNeurons;
+        }
+
+                public void StoreOriginalTransform()
+        {
+            originalPosition = transform.position;
+            originalRotation = transform.rotation;
+            originalCentroid = bounds.center;
+        }
+        
+        public void ResetToOriginalTransform()
+        {
+            transform.position = originalPosition;
+            transform.rotation = originalRotation;
         }
     }
 }

@@ -18,6 +18,11 @@ namespace BrainComponents
         public Dictionary<string, float> minActivities = new Dictionary<string, float>();
         public Dictionary<string, float> maxActivities = new Dictionary<string, float>();
 
+        [Header("Original Transform State")]
+        public Vector3 originalPosition;
+        public Quaternion originalRotation;
+        public Vector3 originalCentroid;
+
         public void AddActivity(string fishName, int timeIdx, float value)
         {
             if (!totalActivityList.ContainsKey(fishName))
@@ -40,7 +45,16 @@ namespace BrainComponents
         public void AddNeuron(NeuronData neuron)
         {
             neurons.Add(neuron);
-            bounds.Encapsulate(neuron.originalPosition);
+                
+            // Initialize bounds properly for the first neuron
+            if (neurons.Count == 1)
+            {
+                bounds = new Bounds(neuron.originalPosition, Vector3.zero);
+            }
+            else
+            {
+                bounds.Encapsulate(neuron.originalPosition);
+            }
         }
 
 
@@ -57,6 +71,20 @@ namespace BrainComponents
                 }
             }
             return activeNeurons;
+        }
+
+        public void StoreOriginalTransform()
+        {
+            originalPosition = transform.position;
+            originalRotation = transform.rotation;
+            originalCentroid = bounds.center;
+        }
+        
+        public void ResetToOriginalTransform()
+        {
+            transform.position = originalPosition;
+            transform.rotation = originalRotation;
+            // Note: centroid will automatically be correct once position/rotation are reset
         }
     }
 }

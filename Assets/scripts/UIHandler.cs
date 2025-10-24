@@ -20,8 +20,12 @@ public class UIHandler : MonoBehaviour
     public Button showSeizureButton;
     [Tooltip("Button to make seizure frames")]
     public Button makeFramesButton;
+
     [Tooltip("Button to load all fish seizure files")]
-    public Button loadAllFishButton;
+    public Button bulkLoadButton;
+
+    [Tooltip("Button to export all fish seizure frames")]
+    public Button bulkExportButton;
 
     [Tooltip("Input field for start time")]
     public TMP_InputField startTimeInput;
@@ -37,7 +41,8 @@ public class UIHandler : MonoBehaviour
 
         showSeizureButton.onClick.AddListener(OnShowSeizureButtonClicked);
         makeFramesButton.onClick.AddListener(OnMakeFramesButtonClicked);
-        makeFramesButton.onClick.AddListener(OnLoadAllFishClicked);
+        bulkLoadButton.onClick.AddListener(OnBulkLoadClicked);
+        bulkExportButton.onClick.AddListener(OnBulkExportClicked);
 
         DisableActionButtons();
 
@@ -100,6 +105,8 @@ public class UIHandler : MonoBehaviour
     {
         showSeizureButton.interactable = true;
         makeFramesButton.interactable = true;
+        bulkLoadButton.interactable = true;
+        bulkExportButton.interactable = true;
     }
 
 
@@ -107,6 +114,8 @@ public class UIHandler : MonoBehaviour
     {
         showSeizureButton.interactable = false;
         makeFramesButton.interactable = false;
+        bulkLoadButton.interactable = true;
+        bulkExportButton.interactable = false;
     }
 
     // on button click call loadfishdata function ShowSeizureData
@@ -119,12 +128,17 @@ public class UIHandler : MonoBehaviour
     public void OnMakeFramesButtonClicked()
     {
         Debug.Log("Start making frames");
-        loadFishData.MakeSeizureFrames();
+        loadFishData.MakeFrames();
     }
 
-    public void OnLoadAllFishClicked()
+    public void OnBulkLoadClicked()
     {
-        Debug.Log("Start showing seizure data");
-        loadFishData.LoadAllFishSeizureData();
+        Debug.Log("Loading all fish files, this will take some time");
+        loadFishData.BulkLoadAllFish();
+    }
+    public void OnBulkExportClicked()
+    {
+        Debug.Log("Loading all fish files, this will take some time");
+        loadFishData.BulkExportAllFrames();
     }
 }

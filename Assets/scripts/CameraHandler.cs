@@ -37,61 +37,14 @@ public class CameraHandler : MonoBehaviour
         featureSetCamera.enabled = false;
         // Optionally, set mainCamera to full screen at start
         mainCamera.rect = new Rect(0f, 0f, 1f, 1f);
-    }
-    public void SetupRegionViewports()
-    {
-        Debug.Log("Setup viewports");
 
-        mainCamera.depth = 0;
-        lineGraphCamera.depth = 1;
-        dorsalCamera.depth = 2;
-        ventralCamera.depth = 3;
-        sagittalCamera.depth = 4;
-        featureSetCamera.depth = 5;
-
-        lineGraphCamera.enabled = true;
-        dorsalCamera.enabled = true;
-        ventralCamera.enabled = true;
-        sagittalCamera.enabled = true;
-        if (featureSetViewEnabled) 
-            {
-            featureSetCamera.enabled = true; 
-            dorsalCamera.enabled = false;
-            }
-        else
-            {
-            featureSetCamera.enabled = false;
-            dorsalCamera.enabled = true;
-             }
-
-        // Main camera: left 50% of screen
-        mainCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
-        mainCamera.clearFlags = CameraClearFlags.Skybox;
-
-        // Linegraph camera: left 50% of screen, top 20%
-        lineGraphCamera.rect = new Rect(0f, 0.8f, 0.5f, 0.2f);
-        lineGraphCamera.clearFlags = CameraClearFlags.Depth;
-
-        // Dorsal feature set view: top third of right 50%
-        dorsalCamera.rect = new Rect(0.5f, 0.66f, 0.5f, 0.34f);
-        dorsalCamera.clearFlags = CameraClearFlags.Depth;
-
-        // Feature set view: top third of right 50%
-        featureSetCamera.rect = new Rect(0.5f, 2f/3f, 0.5f, 1f/3f);
-        featureSetCamera.clearFlags = CameraClearFlags.Depth;
-
-        // Ventral: middle third of right 50%
-        ventralCamera.rect = new Rect(0.5f, 1f/3f, 0.5f, 1f/3f);
-        ventralCamera.clearFlags = CameraClearFlags.Depth;
-
-        // Sagittal: bottom third of right 50%
-        sagittalCamera.rect = new Rect(0.5f, 0f, 0.5f, 1f/3f);
-        sagittalCamera.clearFlags = CameraClearFlags.Depth;
-
+        // setup linegraph camera to show timeline view precisely
+        lineGraphCamera.orthographic = true;
+        lineGraphCamera.orthographicSize = 200f; 
     }
 
 
-    public void SetupWholeBrainViewports()
+    public void SetupViewports()
     {
         Debug.Log("Setup whole brain viewports");
         mainCamera.depth = 0;
@@ -99,16 +52,22 @@ public class CameraHandler : MonoBehaviour
         lineGraphCamera.enabled = true;
         featureSetCamera.enabled = true; 
 
-        // Main camera: left 50% of screen
-        mainCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
+        // Main camera: left 50% of screen, bottom 80%
+        mainCamera.rect = new Rect(0f, 0f, 0.5f, .8f);
         mainCamera.clearFlags = CameraClearFlags.Skybox;   
 
         // Linegraph camera: left 50% of screen, top 20%
-        lineGraphCamera.rect = new Rect(0f, 0.8f, 0.5f, 0.2f);
+        lineGraphCamera.rect = new Rect(0f, 0.8f, 1f, 0.2f);
         lineGraphCamera.clearFlags = CameraClearFlags.Depth;
 
-        // Feature set view: right 50%
-        featureSetCamera.rect = new Rect(0.5f, 0f, 0.5f, 1f);
+//Parameters breakdown:
+// 0f = X position (left edge) - starts at the very left of the screen (0%)
+// 0.8f = Y position (bottom edge) - starts at 80% up from the bottom of the screen
+// 1f = Width - takes up the full width of the screen (100%)
+// 0.2f = Height - takes up 20% of the screen height
+
+        // Feature set view: right 50%, bottom 80%
+        featureSetCamera.rect = new Rect(0.5f, 0f, 0.5f, .8f);
         featureSetCamera.clearFlags = CameraClearFlags.Depth;
     }
 
@@ -173,8 +132,93 @@ public class CameraHandler : MonoBehaviour
             return centerPoint;
         }
     
+
+    public Vector3 PositionMainCamera(Vector3 centerPos, float extent)
+    {
+        if (centerPos == null)
+        {
+            Debug.LogWarning("No centroid position provided for camera positioning.");
+            return Vector3.zero;
+        }
+
+        Debug.Log($"Positioning cameras to center: {centerPos}, extent: {extent}");
+
+        // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)
+        Vector3 mainViewDir = Vector3.back;      // -Z
+
+        // Use the extent to set the distance
+        float minDistance = 100f; // Set based on your scene scale
+        float maxDistance = 1200f;
+        float distance = Mathf.Clamp(extent * 2f, minDistance, maxDistance);
+
+        // Main camera
+        // todo move main camera slowly to new position
+        Vector3 newCameraPos = centerPos + mainViewDir * distance;
+        //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
+        mainCamera.transform.position = newCameraPos;
+        mainCamera.transform.LookAt(centerPos);
+        mainCamera.fieldOfView = FOVzoomedout;
+
+        return centerPoint;
+    }
+
+
+    public void SetupRegionViewports()
+    {
+        // no longer used but not deleting yet
+        Debug.Log("Setup viewports");
+
+        mainCamera.depth = 0;
+        lineGraphCamera.depth = 1;
+        dorsalCamera.depth = 2;
+        ventralCamera.depth = 3;
+        sagittalCamera.depth = 4;
+        featureSetCamera.depth = 5;
+
+        lineGraphCamera.enabled = true;
+        dorsalCamera.enabled = true;
+        ventralCamera.enabled = true;
+        sagittalCamera.enabled = true;
+        if (featureSetViewEnabled) 
+            {
+            featureSetCamera.enabled = true; 
+            dorsalCamera.enabled = false;
+            }
+        else
+            {
+            featureSetCamera.enabled = false;
+            dorsalCamera.enabled = true;
+             }
+
+        // Main camera: left 50% of screen
+        mainCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
+        mainCamera.clearFlags = CameraClearFlags.Skybox;
+
+        // Linegraph camera: left 50% of screen, top 20%
+        lineGraphCamera.rect = new Rect(0f, 0.8f, 0.5f, 0.2f);
+        lineGraphCamera.clearFlags = CameraClearFlags.Depth;
+
+        // Dorsal feature set view: top third of right 50%
+        dorsalCamera.rect = new Rect(0.5f, 0.66f, 0.5f, 0.34f);
+        dorsalCamera.clearFlags = CameraClearFlags.Depth;
+
+        // Feature set view: top third of right 50%
+        featureSetCamera.rect = new Rect(0.5f, 2f/3f, 0.5f, 1f/3f);
+        featureSetCamera.clearFlags = CameraClearFlags.Depth;
+
+        // Ventral: middle third of right 50%
+        ventralCamera.rect = new Rect(0.5f, 1f/3f, 0.5f, 1f/3f);
+        ventralCamera.clearFlags = CameraClearFlags.Depth;
+
+        // Sagittal: bottom third of right 50%
+        sagittalCamera.rect = new Rect(0.5f, 0f, 0.5f, 1f/3f);
+        sagittalCamera.clearFlags = CameraClearFlags.Depth;
+
+    }
+
     public Vector3 PositionRegionCameras(Vector3 centerPos, float extent)
     {
+        // no longer used but not deleting yet
         if (centerPos == null)
         {
             Debug.LogWarning("No centroid position provided for camera positioning.");
@@ -223,37 +267,6 @@ public class CameraHandler : MonoBehaviour
         sagittalCamera.transform.position = centerPos + sagittalLeftDir * distance;
         sagittalCamera.transform.LookAt(centerPos);
         sagittalCamera.fieldOfView = FOVdefault;
-
-        return centerPoint;
-    }
-
-
-    public Vector3 PositionWholeBrainCameras(Vector3 centerPos, float extent)
-    {
-        if (centerPos == null)
-        {
-            Debug.LogWarning("No centroid position provided for camera positioning.");
-            return Vector3.zero;
-        }
-
-        Debug.Log($"Positioning cameras to center: {centerPos}, extent: {extent}");
-
-        // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)
-        Vector3 mainViewDir = Vector3.back;      // -Z
-
-        // Use the extent to set the distance
-        float minDistance = 100f; // Set based on your scene scale
-        float maxDistance = 1200f;
-        float distance = Mathf.Clamp(extent * 2f, minDistance, maxDistance);
-
-        // Main camera
-        // todo move main camera slowly to new position
-        Vector3 newCameraPos = centerPos + mainViewDir * distance;
-        newCameraPos.y = newCameraPos.y*2f;
-        //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
-        mainCamera.transform.position = newCameraPos;
-        mainCamera.transform.LookAt(centerPos);
-        mainCamera.fieldOfView = FOVzoomedout;
 
         return centerPoint;
     }

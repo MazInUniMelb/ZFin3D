@@ -84,7 +84,6 @@ namespace BrainComponents
         {
             transform.position = originalPosition;
             transform.rotation = originalRotation;
-            // Note: centroid will automatically be correct once position/rotation are reset
         }
     }
 }

@@ -14,22 +14,6 @@ namespace BrainComponents
         {
             return activeFeatures.Contains(featureName);
         }
-        //     return featureDict[featureName];
-        // }
-
-        // private void RefreshActiveFeatures()
-        // {
-        //     activeFeatures.Clear();
-        //     foreach (var kvp in featureDict)
-        //     {
-        //         if (kvp.Value > 0)
-        //         {
-        //             activeFeatures.Add(kvp.Key);
-        //         }
-        //     }
-        // update featursetDict?
-        // update colour dictionary?
-        // }
 
         public void AddFeature(string featureName)
         {
@@ -54,7 +38,7 @@ namespace BrainComponents
         public Dictionary<string, Dictionary<int, float>> activityList = new Dictionary<string, Dictionary<int, float>>();
         public bool isActive = false;
         private bool wasActive = false;
-        public float inactiveNeuronSize ; // Set from LoadFishData
+        public float inactiveNeuronSize; // Set from LoadFishData
         public float activeNeuronSize; // Set from LoadFishData
 
 
@@ -63,7 +47,7 @@ namespace BrainComponents
             if (highlightSphere == null) highlightSphere = gameObject.GetOrAddComponent<HighlightSphere>();
         }
 
-        
+
         public void ResetPosition()
         {
             this.transform.position = originalPosition;
@@ -151,7 +135,66 @@ namespace BrainComponents
             // Pass sizes to HighlightSphere
             if (highlightSphere != null)
                 highlightSphere.SetSizes(inactiveNeuronSize, activeNeuronSize);
+        }
+
+
+
+        public NeuronData CopyNeuron(BrainData newBrain, Vector3 newPosition, Color? newColor = null)
+        {
+            // Clone the GameObject
+            NeuronData clonedNeuron = Instantiate(this);
+            
+            // Copy basic properties
+            clonedNeuron.neuronIdx = this.neuronIdx;
+            clonedNeuron.originalPosition = newPosition;
+            clonedNeuron.color = newColor ?? this.color;
+       
+            clonedNeuron.subregion = this.subregion;
+            clonedNeuron.label = this.label;
+            clonedNeuron.brain = newBrain;
+
+            clonedNeuron.inactiveNeuronSize = this.inactiveNeuronSize;
+            clonedNeuron.activeNeuronSize = this.activeNeuronSize;
+            clonedNeuron.highlightSphere = this.highlightSphere;
+
+            // Update position
+            clonedNeuron.transform.position = newPosition;
+
+            // Initialize empty activity list and populate afterwards
+            clonedNeuron.activityList = new Dictionary<string, Dictionary<int, float>>();
+
+            // Update material colors
+            if (clonedNeuron.renderer != null)
+            {
+                clonedNeuron.renderer.material.SetColor("_EmissionColor", newColor ?? this.color);
+                clonedNeuron.renderer.material.SetColor("_BaseColor", newColor ?? this.color);
+                clonedNeuron.renderer.material.EnableKeyword("_EMISSION");
+            }
+            else {
+                Debug.LogWarning("Cloned neuron has no renderer component.");
+            }
+
+            return clonedNeuron;
+        }
+
+        public void CopyActivityData(NeuronData originalNeuron)
+        {
+            this.activityList = new Dictionary<string, Dictionary<int, float>>();
+            // this.activityList = originalNeuron.activityList;
+            
+            foreach (KeyValuePair<string, Dictionary<int, float>> fishEntry in originalNeuron.activityList)
+            {
+                string fishName = fishEntry.Key;
+                Dictionary<int, float> timestampData = fishEntry.Value;
+
+                foreach (KeyValuePair<int, float> timestampEntry in timestampData)
+                {
+                    int timestamp = timestampEntry.Key;
+                    float activityValue = timestampEntry.Value;
+                    this.AddActivity(fishName, activityValue, timestamp);
                 }
+            }
+        }
 
     }
 }

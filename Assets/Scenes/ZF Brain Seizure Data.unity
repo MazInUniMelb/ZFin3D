@@ -2738,14 +2738,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dataFolder: Assets/Data
-  postionsFile: ZF.calcium_position_data.csv
+  postionsFile: fish_roi_gt.csv
   selectedFish: 
   selectedRegion: 
   wholeBrain: Brain0
-  animationStepInterval: 0.001
-  nbrFrames: 200
-  szLeftPos: {x: -1200, y: 5000, z: 650}
-  szRightPos: {x: 1600, y: 5000, z: 650}
+  animationStepInterval: 0.5
+  nbrFrames: 100
+  rotationSpeed: 10
+  szLeftPos: {x: -1800, y: 5000, z: 650}
+  szRightPos: {x: 1700, y: 5000, z: 650}
+  exportWidth: 1920
+  exportHeight: 1080
   glowMaterial: {fileID: 2100000, guid: 5f942e50ec6a445fdb1783a7ee4687f8, type: 2}
   dullMaterial: {fileID: 2100000, guid: 8726ebeccdbf044529aba205e7309f32, type: 2}
   inactiveNeuronSize: 3
@@ -2754,7 +2757,7 @@ MonoBehaviour:
   cameraHandler: {fileID: 582102893}
   sphereMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   brainPos: {x: 200, y: -700, z: -1000}
-  distBtwnBrains: 3000
+  distBtwnBrains: 900
   uiHandler: {fileID: 582102894}
   statusMessage: {fileID: 816496209}
   seizureDetails: {fileID: 1260165601}
@@ -2781,6 +2784,7 @@ MonoBehaviour:
   sagittalCamera: {fileID: 1347586527}
   featureSetCamera: {fileID: 1326846810}
   featureSetViewEnabled: 1
+  fsCameras: []
   cameraSpeed: 1
 --- !u!114 &582102894
 MonoBehaviour:
@@ -2857,7 +2861,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!82 &596150700
 AudioSource:
   m_ObjectHideFlags: 0

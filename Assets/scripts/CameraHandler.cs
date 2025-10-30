@@ -15,7 +15,11 @@ public class CameraHandler : MonoBehaviour
     public Camera featureSetCamera;
     public bool featureSetViewEnabled = true;
 
+    public List<Camera> fsCameras = new List<Camera>();
+
     //[Header("Troubleshooting")]
+
+    private GameObject cameraParentObject = null;
 
     private float FOVdefault = 45f;
     private float FOVzoomedout = 55f;
@@ -35,7 +39,7 @@ public class CameraHandler : MonoBehaviour
         ventralCamera.enabled = false;
         sagittalCamera.enabled = false;
         featureSetCamera.enabled = false;
-        // Optionally, set mainCamera to full screen at start
+        // set mainCamera to full screen at start
         mainCamera.rect = new Rect(0f, 0f, 1f, 1f);
 
         // setup linegraph camera to show timeline view precisely
@@ -43,32 +47,68 @@ public class CameraHandler : MonoBehaviour
         lineGraphCamera.orthographicSize = 200f; 
     }
 
-
-    public void SetupViewports()
+    public void CreateFeaturesetCameras(int nbrFeatureSets)
     {
-        Debug.Log("Setup whole brain viewports");
+        // disable any existing feature set cameras
+        foreach (Camera cam in fsCameras)
+        {
+            Destroy(cam.gameObject);
+        }
+        fsCameras.Clear();
+        cameraParentObject = mainCamera.transform.parent.gameObject;
+        
+        for (int i = 1; i <= nbrFeatureSets; i++)
+        {
+                // create duplicate feature set camera for each brain
+                Camera featureSetCamera = Instantiate(this.featureSetCamera);
+                featureSetCamera.name = "FeatureSetCamera" + i.ToString();
+                featureSetCamera.enabled = false;
+                featureSetCamera.transform.SetParent(cameraParentObject.transform, false);
+                fsCameras.Add(featureSetCamera);
+                featureSetCamera.depth = 4 + i;            
+        }
+    }
+
+    public void SetupViewports(int nbrBrains)
+    {
+
         mainCamera.depth = 0;
-        featureSetCamera.depth = 5;
+
         lineGraphCamera.enabled = true;
-        featureSetCamera.enabled = true; 
 
-        // Main camera: left 50% of screen, bottom 80%
-        mainCamera.rect = new Rect(0f, 0f, 0.5f, .8f);
-        mainCamera.clearFlags = CameraClearFlags.Skybox;   
-
-        // Linegraph camera: left 50% of screen, top 20%
+        // Linegraph camera: full width of screen, top 20%
         lineGraphCamera.rect = new Rect(0f, 0.8f, 1f, 0.2f);
         lineGraphCamera.clearFlags = CameraClearFlags.Depth;
 
-//Parameters breakdown:
-// 0f = X position (left edge) - starts at the very left of the screen (0%)
-// 0.8f = Y position (bottom edge) - starts at 80% up from the bottom of the screen
-// 1f = Width - takes up the full width of the screen (100%)
-// 0.2f = Height - takes up 20% of the screen height
+        float featureSetWidth = 1f / nbrBrains;
 
-        // Feature set view: right 50%, bottom 80%
-        featureSetCamera.rect = new Rect(0.5f, 0f, 0.5f, .8f);
-        featureSetCamera.clearFlags = CameraClearFlags.Depth;
+        for (int i = 0; i < (nbrBrains-1); i++) // nbr brains - 1 because first brain is main camera
+        {
+            if (i == 0)
+            {
+                mainCamera.enabled = true;
+                // Main camera: left portion of screen, bottom 80%
+                mainCamera.rect = new Rect(0f, 0f, featureSetWidth, .8f);
+                mainCamera.clearFlags = CameraClearFlags.Skybox;
+            }
+            else
+            {
+                Debug.Log($"Enabling feature set camera {i}: {fsCameras[i].name}");
+                fsCameras[i].enabled = true;
+                // Feature set camera: right portion of screen, bottom 80%
+                fsCameras[i].rect = new Rect(i * featureSetWidth, 0f, featureSetWidth, .8f);
+                fsCameras[i].clearFlags = CameraClearFlags.Skybox;
+            }
+        }
+
+
+        //Parameters breakdown:
+        // 0f = X position (left edge) - starts at the very left of the screen (0%)
+        // 0.8f = Y position (bottom edge) - starts at 80% up from the bottom of the screen
+        // 1f = Width - takes up the full width of the screen (100%)
+        // 0.2f = Height - takes up 20% of the screen height
+
+
     }
 
     public Vector3 SetupMainCameraView(Vector3 centerPos, float extent)
@@ -99,10 +139,13 @@ public class CameraHandler : MonoBehaviour
         mainCamera.transform.LookAt(centerPos);
         mainCamera.fieldOfView = FOVzoomedout;
 
+        // set mainCamera to full screen at start
+        mainCamera.rect = new Rect(0f, 0f, 1f, 1f);
+
         return centerPoint;
     }
 
-    public Vector3 PositionFeatureSetCamera(Vector3 centerPos, float extent)
+    public Vector3 PositionFeatureSetCamera(Camera fsCamera, Vector3 centerPos, float extent)
         {
             if (centerPos == null)
             {
@@ -110,24 +153,24 @@ public class CameraHandler : MonoBehaviour
                 return Vector3.zero;
             }
 
-            Debug.Log($"Positioning feature set camera to center: {centerPos}, extent: {extent}");
+            Debug.Log($"Positioning feature set camera {fsCamera.name} to center: {centerPos}, extent: {extent}");
 
             // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)
             Vector3 mainViewDir = Vector3.back;      // -Z
 
             // Use the extent to set the distance
-            float minDistance = 100f; // Set based on your scene scale
+            float minDistance = 1000f; // Set based on your scene scale
             float maxDistance = 1500f;
-            float distance = Mathf.Clamp(extent * 1.2f, minDistance, maxDistance);
+            float distance = Mathf.Clamp(extent * 1.5f, minDistance, maxDistance);
 
             // Feature set camera
             // todo move main camera slowly to new position
             Vector3 newCameraPos = centerPos + mainViewDir * distance;
 
             //mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, newCameraPos, 0.1f);
-            featureSetCamera.transform.position = newCameraPos;
-            featureSetCamera.transform.LookAt(centerPos);
-            featureSetCamera.fieldOfView = FOVzoomedout;
+            fsCamera.transform.position = newCameraPos;
+            fsCamera.transform.LookAt(centerPos);
+            fsCamera.fieldOfView = FOVzoomedout;
 
             return centerPoint;
         }

@@ -1032,8 +1032,6 @@ private IEnumerator BulkExportAllFramesCoroutine()
             // Clean up
             UnityEngine.Object.DestroyImmediate(screenshot);
             UnityEngine.Object.DestroyImmediate(renderTexture);
-            
-            Debug.Log($"High-res screenshot saved: {filepath} ({exportWidth}x{exportHeight})");
         }
         else
         {
@@ -1491,10 +1489,19 @@ private IEnumerator BulkExportAllFramesCoroutine()
                 Vector3 newPosition = neuron.originalPosition + new Vector3(distBtwnBrains, 0, 0);
                 NeuronData newNeuron = neuron.CopyNeuron(newBrain, newPosition, featureColor);
                 
+                HighlightSphere originalHighlight = neuron.highlightSphere;
+                
                 // Set up hierarchy
                 newNeuron.region = newBrain.regions[neuron.region.name];
                 newNeuron.transform.SetParent(newBrain.regions[neuron.region.name].gameObject.transform, false);
                 newNeuron.InitNeuron(sphereMesh, glowMaterial, activeNeuronSize);
+
+                // Configure highlight sphere to use original's master sphere
+                newNeuron.highlightSphere.masterSphere = originalHighlight;
+                newNeuron.highlightSphere.animateGlow = false;  // Disable independent animation
+                newNeuron.highlightSphere.animateSize = false;  // Disable independent animation
+                newNeuron.highlightSphere.loop = false;         // Disable looping
+                
 
                 // Add to brain and region
                 newBrain.AddNeuron(newNeuron);

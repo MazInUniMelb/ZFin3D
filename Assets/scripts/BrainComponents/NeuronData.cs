@@ -28,7 +28,7 @@ namespace BrainComponents
         public Color color;
         public string subregion;
         public string label;
-        private HighlightSphere highlightSphere;
+        public HighlightSphere highlightSphere;
         public MeshFilter meshFilter;
         public Renderer renderer;
         public SphereCollider collider;
@@ -132,9 +132,13 @@ namespace BrainComponents
             renderer.material.SetColor("_EmissionColor", color);
             renderer.material.SetColor("_BaseColor", color);
 
+            highlightSphere = GetComponent<HighlightSphere>();
+            if (highlightSphere == null)
+                    {
+                        highlightSphere = gameObject.AddComponent<HighlightSphere>();
+                    }
             // Pass sizes to HighlightSphere
-            if (highlightSphere != null)
-                highlightSphere.SetSizes(inactiveNeuronSize, activeNeuronSize);
+            highlightSphere.SetSizes(inactiveNeuronSize, activeNeuronSize);
         }
 
 

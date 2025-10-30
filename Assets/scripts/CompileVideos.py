@@ -1,6 +1,6 @@
 # ZFin3D: Compile Videos from png frame files using directory structure
 ## Faculty of MDHS and MDAP collab engagement  
-### created 11 Jul 2025, last updated 11 Jul 2025
+### created 11 Jul 2025, last updated 31 Oct 2025
 
 ### Data source Scott Lab and analysis by Wei Quin
 ### Visualisations by Amanda Belton, Wei Quin and Ethan Scott
@@ -15,7 +15,8 @@ def interpolate_frame(frame1, frame2, factor):
     return cv2.addWeighted(frame1, 1 - factor, frame2, factor, 0)
 
 
-def make_video(fname, dir, outputdir, starttime, endtime, cropto):
+def make_video(fishname, dir, outputdir, starttime, endtime, cropto):
+    fname = fishname + "."+str(starttime)+"."+str(endtime)+".mp4"
     frame_repeat_count = 10   # Higher number will be slower video, >1 needed for interpolation
     pics = sorted([i for i in os.listdir(dir) if i.lower().endswith(".png")])
     if not pics:
@@ -114,5 +115,4 @@ for folder in folders:
         fishname = folder.split('_')[1][0:6]
         if fishname in fishies:
             print(f"Processing folder: {folder} for fish: {fishname}")
-            videoName = fishname+".mp4"
-            make_video(videoName, folder, video_directory,starttime, endtime,cropto)
+            make_video(fishname, folder, video_directory,starttime, endtime,cropto)

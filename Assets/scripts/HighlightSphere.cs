@@ -33,6 +33,8 @@ public class HighlightSphere : MonoBehaviour
     public float t = 0.0f; // starting time value for the Lerp (Lerp => Linear intERPolation)
     float animationDirection = -1.0f; // 1.0f for increasing, -1.0f for decreasing time
 
+    [System.NonSerialized]
+    public HighlightSphere masterSphere = null;  // Reference to master sphere
 
     // Because this script is set to "ExecuteAlways", and Awake() gets called every time the script is loaded
     // We need to check if we already retreived the material from the object
@@ -67,9 +69,40 @@ public class HighlightSphere : MonoBehaviour
 
     void Update()
     {
-        if (animateGlow || animateSize)
+        if (masterSphere != null)
         {
+            // SLAVE MODE for featueset brains: Copy all animation state from master
+            SyncFromMaster();
+        }
+        else if (animateGlow || animateSize)
+        {
+            // MASTER MODE for brain[0]: Run normal animation
             UpdateAnimatedIntensity();
+        }
+    }
+
+
+    private void SyncFromMaster()
+    {
+        // Copy all animation state
+        this.t = masterSphere.t;
+        this.glowIntensity = masterSphere.glowIntensity;
+        this.size = masterSphere.size;
+        this.animationDirection = masterSphere.animationDirection;
+        
+        // Apply size changes
+        if (animateSize)
+        {
+            gameObject.transform.localScale = Vector3.one * size;
+        }
+        
+        // Apply glow changes
+        if (glowMaterial != null)
+        {
+            colorMutator = new ColorMutator(baseColor);
+            colorMutator.exposureValue = glowIntensity;
+            mutatedColor = colorMutator.exposureAdjustedColor;
+            glowMaterial.SetColor("_EmissionColor", mutatedColor);
         }
     }
 
@@ -83,6 +116,16 @@ public class HighlightSphere : MonoBehaviour
 
     public void TurnOn()
     {
+        if (masterSphere != null)
+        {
+            // Slaves don't control their own animation
+            return;
+        }
+        
+        // Master sphere logic
+        animateGlow = true;
+        animateSize = true;
+
         if (animationDirection > 0f) return;
         animationDirection = 1.0f;
         t = 0.0f;
@@ -90,6 +133,17 @@ public class HighlightSphere : MonoBehaviour
 
     public void TurnOff()
     {
+
+        if (masterSphere != null)
+        {
+            // Slaves don't control their own animation
+            return;
+        }
+        
+        // Master sphere logic
+        animateGlow = false;
+        animateSize = false;
+        
         if (animationDirection < 0f) return;
         animationDirection = -1.0f;
         t = 1.0f;

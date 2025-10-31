@@ -9,67 +9,109 @@ import os
 from PIL import Image
 import cv2
 import numpy as np
+import re
 
 
-def interpolate_frame(frame1, frame2, factor):
-    return cv2.addWeighted(frame1, 1 - factor, frame2, factor, 0)
 
+def extract_frame_number(filename):
+    """Extract frame number from various filename formats"""
+    # Remove extension
+    name = filename.lower().replace('.png', '')
+    
+    # Try different patterns
+    patterns = [
+        r'frame_(\d+)',      # frame_1234
+        r'(\d+)_frame',      # 1234_frame  
+        r'(\d+)$',           # just 1234
+        r'_(\d+)_',          # something_1234_something
+        r'(\d+)',            # any number in the filename
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, name)
+        if match:
+            return int(match.group(1))
+    
+    return None
 
-def make_video(fishname, dir, outputdir, starttime, endtime, cropto):
+def interpolate_frames(img1, img2, num_frames):
+    """Generate interpolated frames between img1 and img2"""
+    frames = []
+    for i in range(1, num_frames + 1):
+        alpha = i / (num_frames + 1)
+        blended = cv2.addWeighted(img1, 1 - alpha, img2, alpha, 0)
+        frames.append(blended)
+    return frames
+
+def make_video(fishname, dir, outputdir, starttime, endtime):
     fname = fishname + "."+str(starttime)+"."+str(endtime)+".mp4"
-    frame_repeat_count = 10   # Higher number will be slower video, >1 needed for interpolation
-    pics = sorted([i for i in os.listdir(dir) if i.lower().endswith(".png")])
+    frame_repeat_count = 5  # Higher number will be slower video, >1 needed for interpolation
+ 
+    # Get all PNG files
+    all_pics = [i for i in os.listdir(dir) if i.lower().endswith(".png")]
+    
+    # Extract frame numbers and filter
+    filtered_pics = []
+    for pic in all_pics:
+        frame_num = extract_frame_number(pic)
+        if frame_num is not None and starttime <= frame_num <= endtime:
+            filtered_pics.append((frame_num, pic))
+    
+    # Sort by frame number
+    filtered_pics.sort(key=lambda x: x[0])
+    pics = [pic for _, pic in filtered_pics]
+    
     if not pics:
-        print(f"No suitable PNG images found in {dir}")
+        print(f"No PNG images found in range {starttime}-{endtime} in {dir}")
+        print(f"Available files sample: {all_pics[:10]}")
         return
 
-
+    print(f"Found {len(pics)} images in timeframe {starttime}-{endtime}")
+    print(f"Frame range: {filtered_pics[0][0]} to {filtered_pics[-1][0]}")
+    
     # Read the first image to get dimensions
     first_image = cv2.imread(os.path.join(dir, pics[0]))
     height, width, layers = first_image.shape
     print(first_image.shape)
 
-    # Extract crop parameters**
-    crop_x, crop_y, crop_width, crop_height = cropto
-    print(f"Cropping to: x={crop_x}, y={crop_y}, width={crop_width}, height={crop_height}")
-
-    # Validate crop parameters**
-    if crop_x + crop_width > width or crop_y + crop_height > height:
-        print(f"Error: Crop dimensions exceed image size!")
-        print(f"Image size: {width}x{height}, Crop area: {crop_x},{crop_y} to {crop_x+crop_width},{crop_y+crop_height}")
-        return
 
     # Define codec with CROPPED dimensions**
-    fourcc = cv2.VideoWriter_fourcc(*'avc1')
-    out = cv2.VideoWriter(os.path.join(outputdir, fname), fourcc, 60, (crop_width, crop_height))
-
-    total_pics = len(pics)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(os.path.join(outputdir, fname), fourcc, 60, (width, height))
     frame_count = 0
 
-    for i in range(starttime, min(endtime, total_pics)):
-        
+    print(f"Creating video {fname} from frames {starttime} to {endtime}")
+    for i in range(0, len(pics)-1):
         frame= cv2.imread(os.path.join(dir, pics[i]))
         if frame is None:
             print(f"Failed to read frame: {pics[i]}")
             continue
 
-        # Crop frame1 in memory and write directly to video**
-        cropped_frame1 = frame[crop_y:crop_y+crop_height, crop_x:crop_x+crop_width]
-        out.write(cropped_frame1)
+
+        out.write(frame)
         frame_count += 1
 
-        if i < total_pics - 1:
-            frame = cv2.imread(os.path.join(dir, pics[i+1]))
-            if frame is None:
-                print(f"Failed to read next frame: {pics[i+1]}")
-                continue
+        frame = cv2.imread(os.path.join(dir, pics[i+1]))
+        if frame is None:
+            print(f"Failed to read next frame: {pics[i+1]}")
+            continue
 
-            cropped_frame2 = frame[crop_y:crop_y+crop_height, crop_x:crop_x+crop_width]
+        for repeat in range(frame_repeat_count):
+            out.write(frame)
+            frame_count += 1
 
-            for repeat in range(frame_repeat_count):
-                out.write(cropped_frame2)
+        # Interpolate frames between current and next
+        current_frame = cv2.imread(os.path.join(dir, pics[i]))
+        next_frame = cv2.imread(os.path.join(dir, pics[i+1]))
+        if current_frame is None or next_frame is None:
+            print(f"Failed to read frames for interpolation: {pics[i]}, {pics[i+1]}")
+        else:
+            interpolated_frames = interpolate_frames(current_frame, next_frame, 2)
+            for interp_frame in interpolated_frames:
+                out.write(interp_frame)
                 frame_count += 1
-            #cropped_frame1 = cropped_frame2 # needed for interpolation but not using right now
+
+
     print(f"Total frames written: {frame_count}")
 
     out.release()
@@ -104,10 +146,8 @@ fishies = ['Fish62']
 # starttime = 0
 # endtime = 4200
 
-starttime = 3750
-endtime = 3800
-
-cropto = (0, 240, 900, 840)  # x,y,w,h
+starttime = 3400
+endtime = 3450
 
 # fishies = ['Fish01', 'Fish07', 'Fish42']
 for folder in folders:
@@ -115,4 +155,4 @@ for folder in folders:
         fishname = folder.split('_')[1][0:6]
         if fishname in fishies:
             print(f"Processing folder: {folder} for fish: {fishname}")
-            make_video(fishname, folder, video_directory,starttime, endtime,cropto)
+            make_video(fishname, folder, video_directory,starttime, endtime)

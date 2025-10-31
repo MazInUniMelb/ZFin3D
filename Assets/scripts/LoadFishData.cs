@@ -16,16 +16,23 @@ public class LoadFishData : MonoBehaviour
     /* 
     MDHS-MDAP Collaboration showing the intricacies of the zebrafish brain
     Authors: Amanda Belton, Wei Quin and Ethan Scott
-    Last updated: 30 Oct 2025
+    Last updated: 31 Oct 2025
 
     This script loads neuronal data from a chosen CSV file, creates 3D representations of neurons in Unity
     This neuronal data is captured by the Scott Lab at the University of Melbourne, Australia
 
     Todos: 
-        Load new files from Wei eg fish61_signal.csv
+        Debug fourth brain/camera for feature set (doesn't show then goes black after stepthroughseizure)
+        Slide for speed of animation and speed of rotation
+        Click on brain to zoom in on that neuron
+        // add text for brain featurset names (camera overlay)
+        // buttons along the bottom
+        // small text with fish name, scott lab, mdhs-mdap
+        // right side of seizure line, timestamp
+        
         Convert inspector settings for framerate and nbrFrames to show into menupanel
         - show start + end timestamps as marker is moved
-        Set views to show feature
+        
         View name shown in viewport ui overlay
         Set colour of endMarker to different to start marker (gray?)
     Later us:
@@ -46,7 +53,9 @@ public class LoadFishData : MonoBehaviour
         Show time stamp in seizure details
         Show tail movement video synced to seizure timestamp
     Done:
-
+        Set views to show feature
+        Colour adjustments for featursets, background darker
+        Load new files from Wei eg fish61_signal.csv
         Rotating brain (brain 2) (whole brain all regions) in maincamera (start with dorsal view)
         Show featureset only (Brain1)
         Generate stills for video
@@ -100,10 +109,10 @@ public class LoadFishData : MonoBehaviour
     public Vector3 szRightPos;
     [Header("Export Settings")]
     [Tooltip("Width for exported frames")]
-    public int exportWidth = 1920;
+    public int exportWidth = 2560;
 
     [Tooltip("Height for exported frames")]
-    public int exportHeight = 1080;
+    public int exportHeight = 1440;
 
     [Header("Neuron Aesthetics")]
     [Tooltip("Material used for the neuronal glowing effect from seizure data")]
@@ -168,10 +177,10 @@ public class LoadFishData : MonoBehaviour
     private Dictionary<string, Color> featureColoursDict = new Dictionary<string, Color>();
     private Dictionary<int, Color> featuresetColourList = new Dictionary<int, Color>
     {
-        { 1, new Color32(0xfc, 0xfc, 0x56, 0xff) }, // Yellow (#fcfc56)
-        { 2, new Color32(0xa0, 0xff, 0x8e, 0xff) }, // Light Green (#a0ff8e)
-        { 3, new Color32(0xfc, 0x88, 0x56, 0xff) }, // Orange (#fc8856)
-        { 4, new Color32(0xfa, 0x7f, 0xff, 0xff) }  // Light Purple (#fa7fff)
+        { 1, new Color32(0xff, 0xff, 0x00, 0xff) }, // Vibrant Yellow (#ffff00)
+        { 2, new Color32(0x00, 0xff, 0x00, 0xff) }, // Vibrant Green (#00ff00)
+        { 3, new Color32(0xff, 0x69, 0x00, 0xff) }, // Vibrant Orange (#ff6900)
+        { 4, new Color32(0x8b, 0x00, 0xff, 0xff) }  // Vibrant Purple (#8b00ff)
     };
 
     private Dictionary<string, string> fishFileDict = new Dictionary<string, string>();
@@ -794,8 +803,9 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
         {
             numTimestamps = (int)brains[0].regions[selectedRegion].sumActivities[selectedFish].Count;
         }
+        endTimestamp = Math.Min(markerTimestamp + nbrFrames, numTimestamps - 1);
 
-        StartCoroutine(StepThroughSeizureData(markerTimestamp, numTimestamps, animationStepInterval, exportFrames: false));
+        StartCoroutine(StepThroughSeizureData(markerTimestamp, endTimestamp, animationStepInterval, exportFrames: false));
         StartCoroutine(RotateBrainDuringSeizure());
     }
 
@@ -995,52 +1005,164 @@ private IEnumerator BulkExportAllFramesCoroutine()
 
         Debug.Log("Starting frame generation and brain rotation");
 
-        StartCoroutine(StepThroughSeizureData(0, numTimestamps, .001f, exportFrames: true, exportPath));
-        StartCoroutine(RotateBrainDuringSeizure());
+        // temporarily just generate frames 3740-3810
+
+        timelineMarker.transform.position = timelinePoints[3400];
+        endTimelineMarker.transform.position = timelinePoints[3450];
+
+        StartCoroutine(ExportFramesCoroutine(3400, 3450, exportPath));
+        //StartCoroutine(StepThroughSeizureData(0, numTimestamps, .001f, exportFrames: true, exportPath));
+        //StartCoroutine(RotateBrainDuringSeizure());
+        //StartCoroutine(StepThroughSeizureData(3400, 3450, .1f, exportFrames: true, exportPath));
 
     }
     
+    
+private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string exportPath)
+{
+    Debug.Log($"Starting frame export: {startFrame} to {endFrame}");
+    
+    // Calculate rotation per frame (fixed amount for consistent export)
+    float rotationPerFrame = rotationSpeed * 0.1f; // Adjust as needed
+    
+    // Store original brain transforms
+    Dictionary<BrainData, Quaternion> originalRotations = new Dictionary<BrainData, Quaternion>();
+    foreach (BrainData brain in brains)
+    {
+        originalRotations[brain] = brain.transform.rotation;
+    }
+    
+    for (int frame = startFrame; frame <= endFrame; frame++)
+    {
+        UpdateNeuronStates(frame, selectedFish, selectedRegion);
+
+            if (timelineMarker != null && timelinePoints.Count > frame)
+            {
+                timelineMarker.transform.position = timelinePoints[frame];
+            }
+        
+
+        yield return new WaitForFixedUpdate(); // Physics update
+        yield return null; // One frame to ensure all visual updates
+        
+        foreach (BrainData brain in brains)
+        {
+            Vector3 centroid = brain.bounds.center;
+            brain.transform.RotateAround(centroid, Vector3.up, rotationPerFrame);
+        }
+        
+        yield return new WaitForEndOfFrame();
+        
+        // Capture frame
+        string regionID = selectedRegion.Replace(" ", "").Substring(0, Math.Min(5, selectedRegion.Replace(" ", "").Length));
+        string framefile = Path.Combine(exportPath, $"{selectedFish}_{regionID}_{frame:D05}.png");
+        
+        // Use simple screenshot - no complex rendering
+        ScreenCapture.CaptureScreenshot(framefile);
+        
+        Debug.Log($"Exported frame {frame}/{endFrame}");
+        
+        yield return new WaitForSeconds(0.01f);
+    }
+    
+    // Restore original brain rotations
+    foreach (var kvp in originalRotations)
+    {
+        kvp.Key.transform.rotation = kvp.Value;
+    }
+    
+    Debug.Log($"Frame export completed: {endFrame - startFrame} frames exported to {exportPath}");
+    
+    // Show UI again
+    uiHandler.ShowMenuPanel();
+}
+
     private void CaptureHighResScreenshot(string filepath, bool useCustomResolution = true)
     {
-        if (useCustomResolution && cameraHandler?.mainCamera != null)
+    if (useCustomResolution && cameraHandler?.mainCamera != null)
         {
-            // **OPTION 3: Camera-based high-res capture**
-            Camera mainCam = cameraHandler.mainCamera;
-            
-            // Create render texture at custom resolution
-            RenderTexture renderTexture = new RenderTexture(exportWidth, exportHeight, 24);
-            RenderTexture previousTarget = mainCam.targetTexture;
-            
-            // Set camera to render to high-res texture
-            mainCam.targetTexture = renderTexture;
-            mainCam.Render();
-            
-            // Read the render texture
-            RenderTexture.active = renderTexture;
-            Texture2D screenshot = new Texture2D(exportWidth, exportHeight, TextureFormat.RGB24, false);
-            screenshot.ReadPixels(new Rect(0, 0, exportWidth, exportHeight), 0, 0);
-            screenshot.Apply();
-            
-            // Save the high-res image
-            byte[] pngData = screenshot.EncodeToPNG();
-            File.WriteAllBytes(filepath, pngData);
-            
-            // Restore camera settings
-            mainCam.targetTexture = previousTarget;
-            RenderTexture.active = null;
-            
-            // Clean up
-            UnityEngine.Object.DestroyImmediate(screenshot);
-            UnityEngine.Object.DestroyImmediate(renderTexture);
-        }
-        else
+
+        int screenWidth = Screen.width;
+        int screenHeight = Screen.height;
+        
+        // Create render texture at custom resolution
+        RenderTexture finalTexture = new RenderTexture(exportWidth, exportHeight, 24);
+        RenderTexture.active = finalTexture;
+        GL.Clear(true, true, Color.black);
+        
+        // Render each camera with its viewport settings
+        RenderCameraToTexture(cameraHandler.mainCamera, finalTexture);
+        
+        foreach (Camera fsCam in cameraHandler.fsCameras)
         {
-            // **FALLBACK: Standard screen capture**
-            ScreenCapture.CaptureScreenshot(filepath);
-            Debug.Log($"Standard screenshot saved: {filepath}");
+            if (fsCam != null && fsCam.gameObject.activeInHierarchy)
+            {
+                RenderCameraToTexture(fsCam, finalTexture);
+            }
         }
+        
+        // Read the final composite
+        Texture2D screenshot = new Texture2D(screenWidth, screenHeight, TextureFormat.RGB24, false);
+        screenshot.ReadPixels(new Rect(0, 0, screenWidth, screenHeight), 0, 0);
+        screenshot.Apply();
+        
+        // Save the image
+        byte[] pngData = screenshot.EncodeToPNG();
+        File.WriteAllBytes(filepath, pngData);
+        
+        // Clean up
+        RenderTexture.active = null;
+        UnityEngine.Object.DestroyImmediate(screenshot);
+        UnityEngine.Object.DestroyImmediate(finalTexture);
+        
+        Debug.Log($"Composite high-res screenshot saved: {filepath}");
+    }
+    else
+    {
+        ScreenCapture.CaptureScreenshot(filepath);
+        Debug.Log($"Standard screenshot saved: {filepath}");
+    }
     }
 
+    private void RenderCameraToTexture(Camera cam, RenderTexture targetTexture)
+    {
+        // Store original settings
+        RenderTexture originalTarget = cam.targetTexture;
+        Rect originalViewport = cam.rect;
+        
+        // Calculate viewport in final texture coordinates
+        Rect scaledViewport = new Rect(
+            originalViewport.x * exportWidth,
+            originalViewport.y * exportHeight,
+            originalViewport.width * exportWidth,
+            originalViewport.height * exportHeight
+        );
+        
+        // Create temporary texture for this camera
+        RenderTexture tempTexture = RenderTexture.GetTemporary(
+            (int)scaledViewport.width, 
+            (int)scaledViewport.height, 
+            24
+        );
+        
+        // Render camera to temp texture
+        cam.targetTexture = tempTexture;
+        cam.rect = new Rect(0, 0, 1, 1); // Full viewport in temp texture
+        cam.Render();
+        
+        // Blit to final texture at correct position
+        Graphics.CopyTexture(tempTexture, 0, 0, 0, 0, 
+                            (int)scaledViewport.width, (int)scaledViewport.height,
+                            targetTexture, 0, 0, 
+                            (int)scaledViewport.x, (int)scaledViewport.y);
+        
+        // Restore original settings
+        cam.targetTexture = originalTarget;
+        cam.rect = originalViewport;
+        
+        // Clean up
+        RenderTexture.ReleaseTemporary(tempTexture);
+    }
     private void OnMarkerDrag()
     {
         Debug.Log("Marker dragged");
@@ -1134,71 +1256,90 @@ private IEnumerator BulkExportAllFramesCoroutine()
         Debug.Log($"Timeline markers reset: Start={startTimestamp}, End={endTimestamp}, Total={totalTimestamps}");
     }
 
-    IEnumerator StepThroughSeizureData(int startTimestamp, int numTimestamps = -1, float stepInterval=.001f, bool exportFrames = false, string exportPath = "")
+    // From startTimestamp for the numtimestamps, step through and update neuron states
+    IEnumerator StepThroughSeizureData(int startTimestamp, int endTimestamp, float stepInterval=.5f, bool exportFrames = false, string exportPath = "")
     {
     
+        if (startTimestamp < 0 || endTimestamp <= startTimestamp)
+        {
+            Debug.LogError("Invalid start or end timestamp for seizure data stepping.");
+            yield break;
+        }
+        int nbrFrames = endTimestamp - startTimestamp;
+            
+        Debug.Log($"Stepping through seizure data for fish {selectedFish} in region {selectedRegion}, Startime: {startTimestamp}, endTime: {endTimestamp}");
+        
+        for (int col = startTimestamp; col < endTimestamp; col += 1)
+        {
+            currentSignalTimestamp = col;
+            UpdateNeuronStates(col, selectedFish, selectedRegion);
 
-            int endTimestamp = -1;
-            if (exportFrames)
-                {
-                endTimestamp = numTimestamps;
-                }
+            Debug.Log($"Frame {col}: Active neurons: {activeNeurons.Count}");
+            Debug.Log($"Frame {col}: Brain rotation: {brains[0].transform.rotation}");
+
+            // Move timeline marker
+            if (timelineMarker != null && timelinePoints.Count > col)
+            {
+                timelineMarker.transform.position = timelinePoints[col];
+            }
+
+            // Frame export logic
+            if (exportFrames && !string.IsNullOrEmpty(exportPath))
+            {
+                // Wait for physics and rendering to complete
+                yield return new WaitForEndOfFrame();
+                Debug.Log("Preparing to capture frame for timestamp: " + col);
+                
+                string regionID = selectedRegion.Replace(" ", "").Substring(0, Math.Min(5, selectedRegion.Replace(" ", "").Length));
+                string framefile = Path.Combine(exportPath, $"{selectedFish}_{regionID}_{col:D05}.png");
+                Debug.Log($"Capture frame: {framefile}");
+                // set to false for debugging with simple screenshot
+                CaptureHighResScreenshot(framefile);
+            }
             else
             {
-                endTimestamp = Math.Min(startTimestamp + nbrFrames, numTimestamps);
-            }
-
-
-        Debug.Log($"Stepping through seizure data for fish {selectedFish} in region {selectedRegion}, Startime: {startTimestamp}, endTime: {endTimestamp}");
-            
-            for (int col = startTimestamp; col < endTimestamp; col += 1)
-            {
-                currentSignalTimestamp = col;
-                UpdateNeuronStates(col, selectedFish, selectedRegion);
-
-                // Move timeline marker
-                if (timelineMarker != null && timelinePoints.Count > col)
-                {
-                    timelineMarker.transform.position = timelinePoints[col];
-                }
-
-                // Frame export logic
-                if (exportFrames && !string.IsNullOrEmpty(exportPath))
-                {
-                    yield return new WaitForEndOfFrame();
-                    
-                    string regionID = selectedRegion.Replace(" ", "").Substring(0, Math.Min(5, selectedRegion.Replace(" ", "").Length));
-                    string framefile = Path.Combine(exportPath, $"{selectedFish}_{regionID}_{col:D05}.png");
-                    
-                    // **Use the abstracted high-res capture function**
-                    CaptureHighResScreenshot(framefile);
-                }
-
+                // Wait for the specified interval before next step
                 yield return new WaitForSeconds(stepInterval);
             }
+        }
 
-            // Set the flag to false when done
-            isSeizureDataRunning = false;
+        // Set the flag to false when done
+        isSeizureDataRunning = false;
 
-            // Cleanup and UI restoration
-            int finalEndTimestamp = Mathf.Min(currentSignalTimestamp + nbrFrames, numTimestamps - 1);
-            ResetEndMarker(finalEndTimestamp);
-            uiHandler.ShowMenuPanel();
-            
-            if (exportFrames)
-            {
-                Debug.Log($"Frames exported to {exportPath}");
-            }
+        // Cleanup and UI restoration
+        ResetEndMarker(startTimestamp);
+        uiHandler.ShowMenuPanel();
+        
+        if (exportFrames)
+        {
+            Debug.Log($"Frames exported to {exportPath}");
+        }
     }
 
 
     IEnumerator RotateBrainDuringSeizure()
     {
-        
+
         // Wait for seizure data to start
         while (!isSeizureDataRunning)
         {
             yield return null;
+        }
+        
+        // Calculate rotation per frame based on export mode
+        bool isExporting = (Time.timeScale < 0.01f || Time.deltaTime < 0.002f);
+        float rotationPerFrame;
+        
+        if (isExporting)
+        {
+            // For export mode: use fixed rotation amount per frame
+            rotationPerFrame = rotationSpeed * 0.5f; // Adjust this value as needed
+            Debug.Log($"Export mode detected: Using fixed rotation per frame: {rotationPerFrame}");
+        }
+        else
+        {
+            // For normal playback: use Time.deltaTime
+            rotationPerFrame = rotationSpeed * Time.deltaTime;
         }
 
         // Continuously rotate while seizure data is playing
@@ -1207,12 +1348,19 @@ private IEnumerator BulkExportAllFramesCoroutine()
             // Rotate each brain around its centroid every frame
             foreach (BrainData brain in brains)
             {
-                Vector3 centroid = brain.bounds.center;            
-                brain.transform.RotateAround(centroid, Vector3.up, rotationSpeed * Time.deltaTime);
+                Vector3 centroid = brain.bounds.center;
+                if (isExporting)
+                {
+                    brain.transform.RotateAround(centroid, Vector3.up, rotationPerFrame);
                 }
+                else
+                {
+                    brain.transform.RotateAround(centroid, Vector3.up, rotationSpeed * Time.deltaTime);
+                }
+            }
 
             yield return null; // Update every frame for smooth rotation
-        }
+            }
 
         // Reset all brains to their original transforms when rotation stops
         foreach (BrainData brain in brains)

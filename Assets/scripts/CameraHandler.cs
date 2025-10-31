@@ -119,6 +119,8 @@ public class CameraHandler : MonoBehaviour
             return Vector3.zero;
         }
 
+        centerPoint.x = centerPos.x+50f; // shift to right slightly
+
         Debug.Log($"Positioning cameras to center: {centerPos}, extent: {extent}");
 
         // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)

@@ -174,13 +174,17 @@ public class LoadFishData : MonoBehaviour
         { "None", new Color(0.4588f, 0.4392f, 0.7019f) } // Default to dark RGB: (117,112,179)
     };
 
-    private Dictionary<string, Color> featureColoursDict = new Dictionary<string, Color>();
-    private Dictionary<int, Color> featuresetColourList = new Dictionary<int, Color>
+    private Dictionary<int, Color> brainColours = new Dictionary<int, Color>
     {
-        { 1, new Color32(0xff, 0xff, 0x00, 0xff) }, // Vibrant Yellow (#ffff00)
-        { 2, new Color32(0x00, 0xff, 0x00, 0xff) }, // Vibrant Green (#00ff00)
-        { 3, new Color32(0xff, 0x69, 0x00, 0xff) }, // Vibrant Orange (#ff6900)
-        { 4, new Color32(0x8b, 0x00, 0xff, 0xff) }  // Vibrant Purple (#8b00ff)
+        { 0, new Color32(0xff, 0xff, 0x00, 0xff) }, // Vibrant Yellow (#ffff00)
+        { 1, new Color32(0x00, 0xff, 0x00, 0xff) }, // Vibrant Green (#00ff00)
+        { 2, new Color32(0xff, 0x69, 0x00, 0xff) }, // Vibrant Orange (#ff6900)
+        { 3, new Color32(0x8b, 0x00, 0xff, 0xff) }, // Vibrant Purple (#8b00ff)
+        // Add more colors for additional feature sets
+        { 4, new Color32(0xff, 0x14, 0x93, 0xff) }, // Deep Pink
+        { 5, new Color32(0x00, 0xff, 0xff, 0xff) }, // Cyan
+        { 6, new Color32(0xff, 0xa5, 0x00, 0xff) }, // Orange
+        { 7, new Color32(0x9a, 0x32, 0xcd, 0xff) }  // Dark Orchid
     };
 
     private Dictionary<string, string> fishFileDict = new Dictionary<string, string>();
@@ -288,9 +292,18 @@ public class LoadFishData : MonoBehaviour
     {
         Debug.Log("Has selected fish: " + fishName);
         selectedFish = fishName;
-        if (!string.IsNullOrEmpty(selectedFish) && !string.IsNullOrEmpty(selectedRegion))
+        int nbrBrains = brains.Count;
+        if (!string.IsNullOrEmpty(selectedFish))
         {
-            GetSelectedSeizureData(selectedRegion, selectedFish);
+            StartCoroutine(ShowInitialView(1));
+            if (brains[0].totalActivityList.ContainsKey(selectedFish))
+            {
+                Debug.Log("Seizure data for fish " + selectedFish + " already loaded");
+                return;
+            }
+            // todo: Using async coroutine for better UX
+            uiHandler.DisableActionButtons();
+            LoadSeizureDataSync(selectedFish, isBulkLoading: false);
             statusMessage.text = $"Fish selected: {selectedFish}, Region selected: {selectedRegion}, now loading seizure file";
             // uiHandler.EnableActionButton();
         }
@@ -305,7 +318,14 @@ public class LoadFishData : MonoBehaviour
         // Make seizure line if seizure data is loaded for this fish and region
         if (!string.IsNullOrEmpty(selectedFish) && !string.IsNullOrEmpty(selectedRegion))
         {
-            GetSelectedSeizureData(selectedRegion, selectedFish);
+            if (brains[0].totalActivityList.ContainsKey(selectedFish))
+            {
+                Debug.Log("Seizure data for fish " + selectedFish + " already loaded");
+                return;
+            }
+            // todo: Using async coroutine for better UX
+            uiHandler.DisableActionButtons();
+            LoadSeizureDataSync(selectedFish, isBulkLoading: false);
             statusMessage.text = $"Fish selected: {selectedFish}, Region selected: {selectedRegion}, now loading seizure file";
 
             if (regionName == "Whole Brain")
@@ -316,58 +336,82 @@ public class LoadFishData : MonoBehaviour
             {
                 ShowOneRegion(regionName);
             }
+
+
+            // update activity line
+            StartCoroutine(MakeSeizureLine(regionName));
         }
     }
+
+    // coroutine to setup initial view
+    IEnumerator ShowInitialView(int delaySeconds)
+    {
+        List<Camera> activeCameras = GetActiveBrainCameras();
+        Debug.Log(activeCameras.Count + " active brain cameras found.");
+        ShowWholeBrain();
+        cameraHandler.SetupViewports(activeCameras);
+
+        // todo show each featureset one by one
+        foreach (Camera cam in activeCameras)
+        {
+            cam.enabled = true;
+                            // move brainregions to same region in brain0
+                // activate all neurons in this brain
+                // move brainregions to original positon
+            // deactivate brain[0] neurons
+            yield return new WaitForSeconds(delaySeconds);
+        }
+    }
+     
+
+
+    private List<Camera> GetActiveBrainCameras()
+    {
+        return brains
+            .Where(brain => brain.assignedCamera != null)
+            .Select(brain => brain.assignedCamera)
+            .ToList();
+    }
+
     void ShowWholeBrain()
     {
-        Debug.Log("Show whole brain");
-
         // setup cameras for whole brain
         cameraHandler.PositionMainCamera(brains[0].bounds.center, brains[0].bounds.extents.magnitude);
-
-        int nbrBrains = brains.Count;
-        cameraHandler.SetupViewports(nbrBrains);
-
-        int brainix = 1;
-        foreach (Camera fscamera in cameraHandler.fsCameras)
+        foreach (BrainData brain in brains)
         {
-            BrainData brain = brains[brainix];
-            cameraHandler.PositionFeatureSetCamera(fscamera, brain.bounds.center, brain.bounds.extents.magnitude);
-            // set all regions to active
             foreach (RegionData brainRegion in brain.regions.Values)
             {
+                // set all regions active
                 brainRegion.gameObject.SetActive(true);
+            }  
+            cameraHandler.PositionMainCamera(brains[0].bounds.center, brains[0].bounds.extents.magnitude);
+            if (brain != brains[0])
+            {
+                // reposition featureset camera to encompass entire brain (except for the brain[0] which is main camera)
+                cameraHandler.PositionFeatureSetCamera(brain.assignedCamera, brain.bounds.center, brain.bounds.extents.magnitude);
             }
-            brainix++;
         }
-
-        // update activity line
-        StartCoroutine(MakeSeizureLine("Whole Brain"));
-        
     }
     
     void ShowOneRegion(string regionName)
     {
-        Color regionColor = regionColours.TryGetValue(regionName, out Color c) ? c : Color.white;
-
         // Hide all regions except the selected one
         foreach (BrainData brain in brains)
         {
             foreach (RegionData brainRegion in brain.regions.Values)
             {
-                // set this region active, all others inactive
-                brainRegion.gameObject.SetActive(brainRegion.name == regionName);
-                // reposition cameras to focus on this region
-                foreach (Camera fscamera in cameraHandler.fsCameras)
-                {
-                    cameraHandler.PositionFeatureSetCamera(fscamera, brainRegion.bounds.center, brainRegion.bounds.extents.magnitude);
+
+                bool isActive = brainRegion.name == regionName;
+                brainRegion.gameObject.SetActive(isActive);
+                if (isActive) // if its active set the camera to focus on it
+                    if (brain == brains[0])
+                        cameraHandler.PositionMainCamera(brainRegion.bounds.center, brainRegion.bounds.extents.magnitude);
+                    else
+                        cameraHandler.PositionFeatureSetCamera(brain.assignedCamera, brainRegion.bounds.center, brainRegion.bounds.extents.magnitude);
                 }
-            }
-            
+
         }
-        
-        // update activity line
-        StartCoroutine(MakeSeizureLine(regionName));
+                
     }
 
     IEnumerator ShowRegionsStepByStep(float delaySeconds, BrainData brain)
@@ -399,69 +443,70 @@ public class LoadFishData : MonoBehaviour
         }
         uiHandler.ShowMenuPanel();
     }
-private void LoadSeizureDataSync(string fishName, string regionName, bool isBulkLoading = false, bool hideProgressBar = true)
-{
-    Debug.Log($"Loading seizure data for fish: {fishName}, region: {regionName}");
 
-    if (!fishFileDict.TryGetValue(fishName, out string fishFile))
+    private void LoadSeizureDataSync(string fishName, bool isBulkLoading = false, bool hideProgressBar = true)
     {
-        string errorMsg = $"Error: Fish name {fishName} not found in available files.";
-        statusMessage.text = errorMsg;
-        Debug.LogError(errorMsg);
-        return;
-    }
+        Debug.Log($"Loading seizure data for fish: {fishName}");
 
-    string fullPath = Path.Combine(dataFolder, fishFile);
-    if (!File.Exists(fullPath))
-    {
-        Debug.LogError("File not found: " + fullPath);
-        return;
-    }
-
-    // Only update status message if not bulk loading (bulk manages its own messages)
-    if (!isBulkLoading)
-    {
-        statusMessage.text = $"Loading seizure data for fish: {fishFile} and region: {selectedRegion}";
-    }
-
-    int numRows = 0;
-    int numCols = 0;
-
-    // Fast file analysis
-    using (var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 131072))
-    using (var reader = new StreamReader(fileStream))
-    {
-        reader.ReadLine(); // skip header
-        string firstDataLine = reader.ReadLine();
-        if (firstDataLine == null)
+        if (!fishFileDict.TryGetValue(fishName, out string fishFile))
         {
-            string errorMsg = $"Error: Empty file: {fullPath}";
+            string errorMsg = $"Error: Fish name {fishName} not found in available files.";
             statusMessage.text = errorMsg;
             Debug.LogError(errorMsg);
             return;
         }
-        
-        string[] firstData = firstDataLine.Split(',');
-        numCols = firstData.Length - 10;
-        numRows = 1;
-        
-        while (reader.ReadLine() != null)
-            numRows++;
-    }
 
-    Debug.Log($"Found {numCols} signal columns for {numRows} neuron/rows");
+        string fullPath = Path.Combine(dataFolder, fishFile);
+        if (!File.Exists(fullPath))
+        {
+            Debug.LogError("File not found: " + fullPath);
+            return;
+        }
 
-    // Pre-allocate arrays for performance
-    char[] separators = { ',' };
-    string[] reusableStringArray = new string[numCols + 20];
-    float[] reusableFloatArray = new float[numCols];
-    int[] reusableBinaryArray = new int[numCols];
-    
-    var culture = System.Globalization.CultureInfo.InvariantCulture;
-    var numberStyles = System.Globalization.NumberStyles.Float;
-    
-    int firstActivityColIdx = 10;
-    int rowIdx = 0;
+        // Only update status message if not bulk loading (bulk manages its own messages)
+        if (!isBulkLoading)
+        {
+            statusMessage.text = $"Loading seizure data for fish: {fishFile} and region: {selectedRegion}";
+        }
+
+        int numRows = 0;
+        int numCols = 0;
+
+        // Fast file analysis
+        using (var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 131072))
+        using (var reader = new StreamReader(fileStream))
+        {
+            reader.ReadLine(); // skip header
+            string firstDataLine = reader.ReadLine();
+            if (firstDataLine == null)
+            {
+                string errorMsg = $"Error: Empty file: {fullPath}";
+                statusMessage.text = errorMsg;
+                Debug.LogError(errorMsg);
+                return;
+            }
+
+            string[] firstData = firstDataLine.Split(',');
+            numCols = firstData.Length - 10;
+            numRows = 1;
+
+            while (reader.ReadLine() != null)
+                numRows++;
+        }
+
+        Debug.Log($"Found {numCols} signal columns for {numRows} neuron/rows");
+
+        // Pre-allocate arrays for performance
+        char[] separators = { ',' };
+        string[] reusableStringArray = new string[numCols + 20];
+        float[] reusableFloatArray = new float[numCols];
+        int[] reusableBinaryArray = new int[numCols];
+
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var numberStyles = System.Globalization.NumberStyles.Float;
+
+        int firstActivityColIdx = 10;
+        int rowIdx = 0;
 
         // Main processing loop
         using (var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 262144))
@@ -494,36 +539,34 @@ private void LoadSeizureDataSync(string fishName, string regionName, bool isBulk
             }
         }
 
+        Debug.Log("clone activity data for featureset neurons");
+        //CopyActivityDataToFeatureSetBrains(fishName);
 
-        
-    Debug.Log("clone activity data for featureset neurons");
-    //CopyActivityDataToFeatureSetBrains(fishName);
-
-    // Update min/max values
-    foreach (BrainData brain in brains)
-    {
-        foreach (RegionData region in brain.regions.Values)
+        // Update min/max values
+        foreach (BrainData brain in brains)
         {
-            region.UpdateMinMax();
+            foreach (RegionData region in brain.regions.Values)
+            {
+                region.UpdateMinMax();
+            }
+            brain.UpdateMinMax();
         }
-        brain.UpdateMinMax();
-    }
 
-    // Only handle UI for single file loading
-    if (!isBulkLoading)
-    {
-        uiHandler.EnableActionButtons();
-        statusMessage.text = $"Seizure data loaded for fish: {selectedFish}, region: {selectedRegion} with {numRows} rows and {numCols} signal columns.";
-        
-        // Call MakeSeizureLine only for single file loading
-        StartCoroutine(MakeSeizureLine(regionName));
+        // Only handle UI for single file loading
+        if (!isBulkLoading)
+        {
+            uiHandler.EnableActionButtons();
+            statusMessage.text = $"Seizure data loaded for fish: {selectedFish}, region: {selectedRegion} with {numRows} rows and {numCols} signal columns.";
+
+            // Call MakeSeizureLine only for single file loading
+            StartCoroutine(MakeSeizureLine(selectedRegion));
+        }
+        else
+        {
+            // For bulk loading, just log completion
+            Debug.Log($"Seizure data loaded for fish: {fishName} with {numRows} rows and {numCols} signal columns.");
+        }
     }
-    else
-    {
-        // For bulk loading, just log completion
-        Debug.Log($"Seizure data loaded for fish: {fishName} with {numRows} rows and {numCols} signal columns.");
-    }
-}
 
     // **HELPER METHODS FOR PRE-ALLOCATED PROCESSING**
 
@@ -583,11 +626,6 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
             neuron.AddActivity(fishName, binaryArray[timeIdx], timeIdx);
         }
     }
-    else
-    {
-        // This is normal for feature set brains - they don't have all neurons
-        Debug.Log($"No neuron found with neuronIdx {rowIdx} in brain {thisBrain.name}");
-    }
     }
     
     private void CopyActivityDataToFeatureSetBrains(string fishName)
@@ -629,17 +667,7 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
 
         Debug.Log($"Activity data copying completed for fish {fishName}");
     }
-    void GetSelectedSeizureData(string regionName, string fishName)
-    {
-        if (brains[0].totalActivityList.ContainsKey(fishName))
-        {
-            Debug.Log("Seizure data for fish " + fishName + " already loaded");
-            return;
-        }
-        
-        uiHandler.DisableActionButtons();
-        LoadSeizureDataSync(fishName, regionName, isBulkLoading: false, hideProgressBar: true);
-    }
+ 
 
     IEnumerator MakeSeizureLine(string regionName)
     {
@@ -647,27 +675,26 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
         float maxValue = 0f;
         int numPoints = 0;
 
+        // get summary of all activities for this fish, brain and region
         Dictionary<string, Dictionary<int, float>> allActivities;
-
+        // default to whole brain if no region selected
+        if (regionName == "Select Region" || string.IsNullOrEmpty(regionName))
+        {
+            regionName = "Whole Brain";
+        }
         if (regionName == "Whole Brain")
         {
-            Debug.Log("Show whole brain seizure line ");
-
             minValue = brains[0].minActivities[selectedFish];
             maxValue = brains[0].maxActivities[selectedFish];
             numPoints = (int)brains[0].totalActivityList[selectedFish].Count;
-
             allActivities = brains[0].totalActivityList;
         }
         else
         {
-
             Color regionColor = regionColours[regionName];
-
             minValue = brains[0].regions[regionName].minActivities[selectedFish];
             maxValue = brains[0].regions[regionName].maxActivities[selectedFish];
             numPoints = (int)brains[0].regions[regionName].sumActivities[selectedFish].Count;
-
             allActivities = brains[0].regions[regionName].sumActivities;
         }
         // Create or clear existing seizure line object
@@ -683,16 +710,11 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
 
         Color lineColour = Color.yellow;
         float zPos = szRightPos.z;
-
         float graphHeight = 200f;
-
         Debug.Log($"Creating seizure line with {numPoints} points for fish {selectedFish} in region {regionName}");
         lineRenderer.positionCount = numPoints;
-
-
         float yPos = szLeftPos.y;
         float markerSpacer = 40f;
-
         timelinePoints.Clear();
 
         for (int i = 0; i < numPoints; i++)
@@ -849,7 +871,7 @@ private IEnumerator BulkLoadAllFishCoroutine()
         if (!brains[0].totalActivityList.ContainsKey(fishName))
         {
             // Use the unified function for bulk loading
-            LoadSeizureDataSync(fishName, selectedRegion, isBulkLoading: true, hideProgressBar: false);
+            LoadSeizureDataSync(fishName, isBulkLoading: true);
 
             // Brief pause to allow any pending operations
             yield return new WaitForSeconds(0.1f);
@@ -1446,15 +1468,12 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         Debug.Log("Loading neuronal data from: " + postionsFile);
         // Combine the directory path with the filename
         string fullPath = Path.Combine(dataFolder, postionsFile);
-
         // Check if the file exists
         if (!File.Exists(fullPath))
         {
             Debug.LogError("File not found: " + fullPath);
             return null;
         }
-
-        Debug.Log("Loading file: " + fullPath);
         StreamReader reader = new StreamReader(fullPath);
 
         // Read the header line and ensure it matches the expected format
@@ -1478,8 +1497,6 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         }
 
         // check how many feature sets ie how many columns from 7 onwards, each column is a featureset
-
-        // Feature sets start at index 7
         int featureSetStartIndex = 7;
         int featureSetCount = headers.Length - featureSetStartIndex;
         Dictionary<string, int> featureSetNeuronCounts = new Dictionary<string, int>();
@@ -1489,7 +1506,6 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         GameObject obj = new GameObject(brainName);
         BrainData defaultBrain = obj.AddComponent<BrainData>();
         defaultBrain.activeFeatureSets = featureSetNames;
-        SetupFeatureColours(featureSetNames);
 
         string line;
         int lineIdx = 0;
@@ -1579,28 +1595,34 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
 
     // add default brain as the first brain brain[0]
     defaultBrain.StoreOriginalTransform();
+    defaultBrain.assignedCamera = cameraHandler.mainCamera;
     brains.Add(defaultBrain);
     
     Debug.Log("===============Cloning feature set neurons==================");
     // Clone each featureset into additional brains
-    HashSet<string> allFeatureSets = defaultBrain.activeFeatureSets;
+    List<string> featureSetList = defaultBrain.activeFeatureSets.ToList();
+    Debug.Log($"Total unique feature sets found: {featureSetList.Count}");
     int brainix = 1;
-        foreach (string featureSet in allFeatureSets)
+        foreach (string featureSet in featureSetList)
         {
-            Debug.Log($"Cloning feature set neurons for feature set: {featureSet}");
-            Color ncolor = featuresetColourList[brainix];
+            Color ncolor = brainColours.ContainsKey(brainix)
+                ? brainColours[brainix]
+                : brainColours.Values.First(); // Default to first color
+
+            Debug.Log($"Cloning feature set '{featureSet}' into Brain{brainix} with color {ncolor}");
+
             BrainData newBrain = CloneFeatureSetNeurons(defaultBrain, "Brain" + brainix.ToString(), featureSet, distBtwnBrains * brainix, ncolor);
             newBrain.StoreOriginalTransform();
+            newBrain.assignedCamera = cameraHandler.CreateFeaturesetCamera(featureSet);
             brains.Add(newBrain);
-            brainix++;
+
+            brainix++; // Featuresets are Brain1, Brain2, etc.
         }
 
-        cameraHandler.CreateFeaturesetCameras( featureSetCount);
+    reader.Close();
+    Debug.Log("Added " + defaultBrain.neurons.Count + " neurons to new brain gameObject: " + defaultBrain.name);
 
-        reader.Close();
-        Debug.Log("Added " + defaultBrain.neurons.Count + " neurons to new brain gameObject: " + defaultBrain.name);
-
-        return defaultBrain;
+    return defaultBrain;
     } // end of LoadAllNeuronData
 
 
@@ -1650,7 +1672,6 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
                 newNeuron.highlightSphere.animateSize = false;  // Disable independent animation
                 newNeuron.highlightSphere.loop = false;         // Disable looping
                 
-
                 // Add to brain and region
                 newBrain.AddNeuron(newNeuron);
                 RegionData thisRegion = newBrain.regions[neuron.region.name];
@@ -1660,53 +1681,6 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
             }
         }
         return newBrain;
-    }
-    
-    private void SetupFeatureColours(HashSet<string> featureSetNames)
-    {
-        featureColoursDict.Clear();
-        int colourIx = 0;
-        foreach (string feature in featureSetNames)
-        {
-            if (!featureColoursDict.ContainsKey(feature))
-            {
-                // assign a colour from the list
-                Color color = featuresetColourList.ElementAt(colourIx % featuresetColourList.Count).Value;
-                featureColoursDict[feature] = color;
-                colourIx++;
-            }
-        }
-
-        foreach (var kvp in featureColoursDict)
-        {
-            Debug.Log($"Feature: {kvp.Key}, Colour: {kvp.Value}");
-        }
-    }   
-
-    private Color GetFeatureColour(HashSet<string> activeFeatures)
-    {
-        // todo debug, this isn't working 2nd time its called??
-        Color fColour = Color.white;
-        Debug.Log("Getting colour for features: " + string.Join(", ", activeFeatures));
-        if (activeFeatures.Count == 1)
-        {
-            string feature = activeFeatures.First();
-            Debug.Log("Getting colour for feature: " + feature);
-            if (featureColoursDict.ContainsKey(feature))
-            {
-                fColour = featureColoursDict[feature];
-            }
-            else
-            {
-                Debug.LogWarning($"Feature '{feature}' not found in featureColoursDict!");
-                fColour = Color.white;
-            }
-        }
-        else
-        {
-            fColour = Color.Lerp(Color.red, Color.blue, 0.5f); // purple for multiple features
-        }
-        return fColour; 
     }
 
     private void DeleteLabels(GameObject parentLabel)

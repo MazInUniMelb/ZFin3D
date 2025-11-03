@@ -3807,7 +3807,7 @@ MonoBehaviour:
   wholeBrain: Brain0
   animationStepInterval: 0.5
   nbrFrames: 100
-  rotationSpeed: 10
+  rotationSpeed: 2
   szLeftPos: {x: -1800, y: 5000, z: 650}
   szRightPos: {x: 1700, y: 5000, z: 650}
   exportWidth: 1920
@@ -5222,7 +5222,7 @@ GameObject:
   - component: {fileID: 734963290}
   - component: {fileID: 734963289}
   m_Layer: 0
-  m_Name: Menu
+  m_Name: OldMenu
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -15415,11 +15415,11 @@ MonoBehaviour:
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
   m_fontSizeMax: 72
-  m_fontStyle: 0
+  m_fontStyle: 32
   m_HorizontalAlignment: 1
   m_VerticalAlignment: 256
   m_textAlignment: 65535
-  m_characterSpacing: 0
+  m_characterSpacing: 5
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0

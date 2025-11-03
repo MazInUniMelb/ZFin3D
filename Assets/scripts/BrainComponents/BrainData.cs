@@ -23,6 +23,9 @@ namespace BrainComponents
         public Quaternion originalRotation;
         public Vector3 originalCentroid;
 
+        [Header("Camera Assignment")]
+        public Camera assignedCamera;
+
         public void AddActivity(string fishName, int timeIdx, float value)
         {
             if (!totalActivityList.ContainsKey(fishName))
@@ -79,7 +82,7 @@ namespace BrainComponents
             originalRotation = transform.rotation;
             originalCentroid = bounds.center;
         }
-        
+
         public void ResetToOriginalTransform()
         {
             transform.position = originalPosition;

@@ -161,6 +161,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: TimelineMarker
       objectReference: {fileID: 0}
+    - target: {fileID: 3826576680166149940, guid: b35faeba429a9944c8b0d131b35b2d9f, type: 3}
+      propertyPath: m_Radius
+      value: 100
+      objectReference: {fileID: 0}
     - target: {fileID: 5586526815911196094, guid: b35faeba429a9944c8b0d131b35b2d9f, type: 3}
       propertyPath: m_LocalPosition.x
       value: -800

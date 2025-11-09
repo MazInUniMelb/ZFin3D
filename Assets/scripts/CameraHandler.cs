@@ -153,7 +153,7 @@ public class CameraHandler : MonoBehaviour
             // Use the extent to set the distance
             float minDistance = 600f; // Set based on your scene scale
             float maxDistance = 1500f;
-            float distance = Mathf.Clamp(extent * 1.5f, minDistance, maxDistance);
+            float distance = Mathf.Clamp(extent * 2f, minDistance, maxDistance);
 
             // Feature set camera
 

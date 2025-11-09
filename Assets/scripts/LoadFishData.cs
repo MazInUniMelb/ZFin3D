@@ -22,7 +22,7 @@ public class LoadFishData : MonoBehaviour
     This neuronal data is captured by the Scott Lab at the University of Melbourne, Australia
 
     Todos: 
-        Debug fourth brain/camera for feature set (doesn't show then goes black after stepthroughseizure)
+        
         Slide for speed of animation and speed of rotation
         Click on brain to zoom in on that neuron
         // add text for brain featurset names (camera overlay)
@@ -30,6 +30,7 @@ public class LoadFishData : MonoBehaviour
         // small text with fish name, scott lab, mdhs-mdap
         // right side of seizure line, timestamp
         
+
         Convert inspector settings for framerate and nbrFrames to show into menupanel
         - show start + end timestamps as marker is moved
         
@@ -53,6 +54,7 @@ public class LoadFishData : MonoBehaviour
         Show time stamp in seizure details
         Show tail movement video synced to seizure timestamp
     Done:
+        Debug fourth brain/camera for feature set (doesn't show then goes black after stepthroughseizure)
         Set views to show feature
         Colour adjustments for featursets, background darker
         Load new files from Wei eg fish61_signal.csv
@@ -1014,7 +1016,7 @@ private IEnumerator BulkExportAllFramesCoroutine()
 
         Debug.Log($"Reset timeline markers for frame export for a total nbr of timestamps: {numTimestamps}");
         // Reset timeline markers for full export
-        ResetTimelineMarkersForFullExport(numTimestamps);
+        //ResetTimelineMarkersForFullExport(numTimestamps);
 
         Debug.Log("Setup export path for seizure frames");
         // Setup export path
@@ -1027,12 +1029,10 @@ private IEnumerator BulkExportAllFramesCoroutine()
 
         Debug.Log("Starting frame generation and brain rotation");
 
-        // temporarily just generate frames 3740-3810
+        int startFrame = currentSignalTimestamp >= 0 ? currentSignalTimestamp : 0;
+        int endFrame = Math.Min(startFrame + nbrFrames, numTimestamps - 1);
 
-        timelineMarker.transform.position = timelinePoints[3400];
-        endTimelineMarker.transform.position = timelinePoints[3450];
-
-        StartCoroutine(ExportFramesCoroutine(3400, 3450, exportPath));
+        StartCoroutine(ExportFramesCoroutine(startFrame, endFrame, exportPath));
         //StartCoroutine(StepThroughSeizureData(0, numTimestamps, .001f, exportFrames: true, exportPath));
         //StartCoroutine(RotateBrainDuringSeizure());
         //StartCoroutine(StepThroughSeizureData(3400, 3450, .1f, exportFrames: true, exportPath));

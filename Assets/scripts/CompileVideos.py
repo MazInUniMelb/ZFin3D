@@ -146,8 +146,8 @@ fishies = ['Fish62']
 # starttime = 0
 # endtime = 4200
 
-starttime = 3400
-endtime = 3450
+starttime = 3263
+endtime = 3363
 
 # fishies = ['Fish01', 'Fish07', 'Fish42']
 for folder in folders:

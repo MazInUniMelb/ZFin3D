@@ -3,18 +3,18 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.Rendering;
 
 public class UIHandler : MonoBehaviour
 {
     [Header("References")]
     public LoadFishData loadFishData;
 
+    [Tooltip("Dropdown for selecting fish")]
+    public TMP_Dropdown fishDropdown;
 
     [Tooltip("Dropdown for selecting region")]
     public TMP_Dropdown regionDropdown;
-
-    [Tooltip("Dropdown for selecting fish")]
-    public TMP_Dropdown fishDropdown;
 
     [Tooltip("Button to show seizure data")]
     public Button showSeizureButton;
@@ -27,27 +27,32 @@ public class UIHandler : MonoBehaviour
     [Tooltip("Button to export all fish seizure frames")]
     public Button bulkExportButton;
 
-    [Tooltip("Input field for start time")]
-    public TMP_InputField startTimeInput;
+    [Tooltip("Show the start time for seizure animation")]
+    public TMPro.TextMeshProUGUI startTimeText;
 
-    [Tooltip("Input field for duration")]
-    public TMP_InputField durationInput;
+    [Tooltip("Show the end time for seizure animation")]
+    public TMPro.TextMeshProUGUI endTimeText;
 
     [Tooltip("Menu canvas to select fish and region")]
     public GameObject menuParentObject;
+
+    [Tooltip("Show fish name in the scene")]
+    public TMPro.TextMeshProUGUI fishNameText;
 
     void Start()
     {
 
         showSeizureButton.onClick.AddListener(OnShowSeizureButtonClicked);
         makeFramesButton.onClick.AddListener(OnMakeFramesButtonClicked);
-        bulkLoadButton.onClick.AddListener(OnBulkLoadClicked);
         bulkExportButton.onClick.AddListener(OnBulkExportClicked);
+        regionDropdown.onValueChanged.AddListener(OnRegionDropdownChanged);
+        fishDropdown.onValueChanged.AddListener(OnFishDropdownChanged);
 
         DisableActionButtons();
 
-        regionDropdown.onValueChanged.AddListener(OnRegionDropdownChanged);
-        fishDropdown.onValueChanged.AddListener(OnFishDropdownChanged);
+        fishDropdown.interactable = true;
+
+        ShowMenuPanel(); // show menu to select fish  
     }
 
     // Populate fish dropdown
@@ -56,6 +61,9 @@ public class UIHandler : MonoBehaviour
         Debug.Log("Populating fish dropdown with: " + string.Join(", ", fishNames));
         fishDropdown.ClearOptions();
         fishDropdown.AddOptions(fishNames);
+  
+        fishDropdown.interactable = true;
+
     }
 
     // Populate region dropdown
@@ -74,7 +82,13 @@ public class UIHandler : MonoBehaviour
             string fishName = fishDropdown.options[index].text;
             loadFishData.selectedFish = fishName;
             loadFishData.statusMessage.text = "Selected Fish: " + fishName;
+            ShowFishName(fishName);
+            fishDropdown.gameObject.SetActive(false);
             loadFishData.SetSelectedFish(fishName);
+        }
+        else
+        {
+            Debug.Log("No fish selected");
         }
     }
     // Region selection changed
@@ -87,12 +101,18 @@ public class UIHandler : MonoBehaviour
         Debug.Log($"Selected region set to: {regionName}");
     }
 
+        public void ShowFishName(string fishName)
+        {
+            fishNameText.text = fishName;
+            fishNameText.gameObject.SetActive(true);
+        }
+
     public void ShowMenuPanel()
     {
         menuParentObject.SetActive(true);
         Debug.Log("Returned to choose fish panel");
         // if fish and region are selected enable actionbutton by retriggerin fish selection
-        OnFishDropdownChanged(fishDropdown.value);
+        //OnFishDropdownChanged(fishDropdown.value);
     }
 
     public void HideMenuPanel()
@@ -103,25 +123,26 @@ public class UIHandler : MonoBehaviour
 
     public void EnableActionButtons()
     {
-        showSeizureButton.interactable = true;
-        makeFramesButton.interactable = true;
-        bulkLoadButton.interactable = true;
-        bulkExportButton.interactable = true;
+        showSeizureButton.gameObject.SetActive(true);
+        makeFramesButton.gameObject.SetActive(true);
+        bulkExportButton.gameObject.SetActive(true);
+        regionDropdown.gameObject.SetActive(true);
     }
 
 
     public void DisableActionButtons()
     {
-        showSeizureButton.interactable = false;
-        makeFramesButton.interactable = false;
-        bulkLoadButton.interactable = true;
-        bulkExportButton.interactable = false;
+        showSeizureButton.gameObject.SetActive(false);
+        makeFramesButton.gameObject.SetActive(false);
+        bulkExportButton.gameObject.SetActive(false);
+        regionDropdown.gameObject.SetActive(false);
     }
 
     // on button click call loadfishdata function ShowSeizureData
     public void OnShowSeizureButtonClicked()
     {
         Debug.Log("Start showing seizure data");
+        DisableActionButtons();
         loadFishData.ShowSeizureData();
     }
 
@@ -131,11 +152,6 @@ public class UIHandler : MonoBehaviour
         loadFishData.MakeFrames();
     }
 
-    public void OnBulkLoadClicked()
-    {
-        Debug.Log("Loading all fish files, this will take some time");
-        loadFishData.BulkLoadAllFish();
-    }
     public void OnBulkExportClicked()
     {
         Debug.Log("Loading all fish files, this will take some time");

@@ -73,7 +73,7 @@ public class DraggableObject : MonoBehaviour
             if (dragAxis.y == false) toDrag.position = new Vector3(toDrag.position.x, prevPos.y, toDrag.position.z);
             if (dragAxis.z == false) toDrag.position = new Vector3(toDrag.position.x, toDrag.position.y, prevPos.z);
 
-            onDrag.Invoke();
+            onDrag?.Invoke();
         }
     }
 }

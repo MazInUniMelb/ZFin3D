@@ -131,8 +131,6 @@ public class LoadFishData : MonoBehaviour
     public float activeNeuronSize = 4.0f;
 
     [Header("Scene References")]
-    [Tooltip("Titles and video viz elements")]
-    public GameObject videoTextElements;
 
     [Tooltip("Reference to the main camera in the scene")]
     public CameraHandler cameraHandler;
@@ -152,6 +150,8 @@ public class LoadFishData : MonoBehaviour
 
     [Tooltip("Show status message in the scene")]
     public TMPro.TextMeshProUGUI statusMessage;
+
+
 
     [Tooltip("Show seizure details")]
     public TMPro.TextMeshProUGUI seizureDetails;
@@ -223,8 +223,6 @@ public class LoadFishData : MonoBehaviour
         mutatedColor = glowMaterial.GetColor("_EmissionColor");
         Application.runInBackground = true;
 
-        // set video viz text elements to inactive
-        videoTextElements.SetActive(false);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -240,15 +238,6 @@ public class LoadFishData : MonoBehaviour
         BrainData thisBrain = LoadAllNeuronData(postionsFile, "Brain0");
 
 
-        List<string> regionNames = thisBrain.regions.Keys.ToList();
-        // insert "Whole Brain" at start of list
-        regionNames.Insert(0, "Whole Brain");
-
-        // set regiondropdown text to 'select region'
-        regionNames.Insert(0, "Select Region"); // Add prompt as first item
-        uiHandler.fishDropdown.value = 0; // Select the prompt by default
-        uiHandler.PopulateRegionDropdown(regionNames);
-
         // Populate fishFileDict with fish name as key and filename as value
         fishFileDict = getFishNamesAndFiles(dataFolder);
         List<string> fishNames = fishFileDict.Keys.ToList();
@@ -256,12 +245,20 @@ public class LoadFishData : MonoBehaviour
         fishNames.Insert(0, "Select Fish"); // Add prompt as first item
         uiHandler.fishDropdown.value = 0; // Select the prompt by default
         uiHandler.PopulateFishDropdown(fishNames);
-        // make the fishdrop down inactive until a region is selected
+
+        List<string> regionNames = thisBrain.regions.Keys.ToList();
+        // insert "Whole Brain" at start of list
+        regionNames.Insert(0, "Whole Brain");
+
+        // set regiondropdown text to 'select region'
+        regionNames.Insert(0, "Select Region"); // Add prompt as first item
+        uiHandler.regionDropdown.value = 0; // Select the prompt by default
+        uiHandler.PopulateRegionDropdown(regionNames);
 
         cameraHandler.SetupMainCameraView(thisBrain.bounds.center, thisBrain.bounds.extents.magnitude);
         // build up the view of brain, region by region
         StartCoroutine(ShowRegionsStepByStep(animationStepInterval, thisBrain)); // Enables each region every .5 seconds
-        statusMessage.text = "Select a region to see neurons";
+        statusMessage.text = "Select a fish to load seizure data. This takes around a minute to load.";
 
     }
 
@@ -287,6 +284,7 @@ public class LoadFishData : MonoBehaviour
                 f => f
             );
 
+        Debug.Log("Available fish files: " + string.Join(", ", fishFiles.Keys));
         return fishFiles;
     }
 
@@ -310,6 +308,8 @@ public class LoadFishData : MonoBehaviour
             // uiHandler.EnableActionButton();
         }
     }
+
+
 
     public void SetSelectedRegion(string regionName)
     {
@@ -802,6 +802,8 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
             FreezeEndMarker(endTimestamp);
         };
 
+        uiHandler.startTimeText.text = startTimestamp.ToString();
+        uiHandler.endTimeText.text = endTimestamp.ToString();
         uiHandler.EnableActionButtons();
         statusMessage.text = $"Move timestamp marker in seizure line graph above then click 'Show Seizure Data' to start animation.";
 
@@ -813,19 +815,20 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
     {
         // make the menu ui inactive
         uiHandler.HideMenuPanel();
+
          // Set the flag to true when starting
         isSeizureDataRunning = true;
 
         // Start stepping through the seizure data
         int markerTimestamp = currentSignalTimestamp >= 0 ? currentSignalTimestamp : 0;
         int numTimestamps = 0;
-        if (selectedRegion == "Whole Brain")
+        if (selectedRegion == "Whole Brain" || selectedRegion == "")
         {
             numTimestamps = (int)brains[0].totalActivityList[selectedFish].Count;
         }
         else
         {
-            numTimestamps = (int)brains[0].regions[selectedRegion].sumActivities[selectedFish].Count;
+            numTimestamps = (int)brains[0].regions[selectedRegion].sumActivities[selectedFish].Count;                
         }
         endTimestamp = Math.Min(markerTimestamp + nbrFrames, numTimestamps - 1);
 
@@ -1005,7 +1008,7 @@ private IEnumerator BulkExportAllFramesCoroutine()
         uiHandler.HideMenuPanel();
 
         int numTimestamps = 0;
-        if (selectedRegion == "Whole Brain")
+        if ((selectedRegion == "Whole Brain") || string.IsNullOrEmpty(selectedRegion))
         {
             numTimestamps = (int)brains[0].totalActivityList[selectedFish].Count;
         }
@@ -1014,7 +1017,7 @@ private IEnumerator BulkExportAllFramesCoroutine()
             numTimestamps = (int)brains[0].regions[selectedRegion].sumActivities[selectedFish].Count;
         }
 
-        Debug.Log($"Reset timeline markers for frame export for a total nbr of timestamps: {numTimestamps}");
+        //Debug.Log($"Reset timeline markers for frame export for a total nbr of timestamps: {numTimestamps}");
         // Reset timeline markers for full export
         //ResetTimelineMarkersForFullExport(numTimestamps);
 
@@ -1045,7 +1048,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
     Debug.Log($"Starting frame export: {startFrame} to {endFrame}");
     
     // Calculate rotation per frame (fixed amount for consistent export)
-    float rotationPerFrame = rotationSpeed * 0.1f; // Adjust as needed
+    float rotationPerFrame = rotationSpeed * 0.5f; // Adjust as needed
     
     // Store original brain transforms
     Dictionary<BrainData, Quaternion> originalRotations = new Dictionary<BrainData, Quaternion>();
@@ -1055,13 +1058,14 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
     }
     
     for (int frame = startFrame; frame <= endFrame; frame++)
-    {
+        {
+        uiHandler.startTimeText.text = frame.ToString();
         UpdateNeuronStates(frame, selectedFish, selectedRegion);
 
-            if (timelineMarker != null && timelinePoints.Count > frame)
-            {
-                timelineMarker.transform.position = timelinePoints[frame];
-            }
+        if (timelineMarker != null && timelinePoints.Count > frame)
+        {
+            timelineMarker.transform.position = timelinePoints[frame];
+        }
         
 
         yield return new WaitForFixedUpdate(); // Physics update
@@ -1081,8 +1085,6 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         
         // Use simple screenshot - no complex rendering
         ScreenCapture.CaptureScreenshot(framefile);
-        
-        Debug.Log($"Exported frame {frame}/{endFrame}");
         
         yield return new WaitForSeconds(0.01f);
     }
@@ -1224,7 +1226,10 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
             {
                 startTimestamp = closestIdx;
                 currentSignalTimestamp = closestIdx;
-                uiHandler.startTimeInput.text = closestIdx.ToString();
+                endTimestamp = Math.Min(startTimestamp + nbrFrames, timelinePoints.Count - 1);
+                Debug.Log($"set start timestamp to: {startTimestamp}");
+                uiHandler.startTimeText.text = startTimestamp.ToString();
+                uiHandler.endTimeText.text = endTimestamp.ToString();
                 foreach (NeuronData neuron in activeNeurons)
                 {
                     neuron.Deactivate();
@@ -1249,7 +1254,6 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
                     neuron.SetActiveState(selectedFish, closestIdx);
                 }
             }
-            endTimestamp = Math.Min(startTimestamp + nbrFrames, timelinePoints.Count - 1);
             ResetEndMarker(endTimestamp);
         }
     }
@@ -1271,9 +1275,10 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         {
             endTimelineMarker.transform.position = timelinePoints[endTimestamp];
         }
-        
+
         // Update UI to reflect the reset
-        uiHandler.startTimeInput.text = startTimestamp.ToString();
+        uiHandler.startTimeText.text = startTimestamp.ToString();
+        uiHandler.endTimeText.text = endTimestamp.ToString();
         
         Debug.Log($"Timeline markers reset: Start={startTimestamp}, End={endTimestamp}, Total={totalTimestamps}");
     }
@@ -1423,7 +1428,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
 
         foreach (BrainData brain in brains)
         {
-            if (regionName == "Whole Brain")
+            if((regionName == "Whole Brain") || string.IsNullOrEmpty(regionName))
             {
                 // Activate neurons for this timestamp
                 activeNeurons.AddRange(brain.GetActiveNeurons(fishName, timestamp));

@@ -1,0 +1,91 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel UpdateNeurons
+
+struct GPUNeuron
+{
+    float3 position;
+    float3 velocity;
+    float3 color;
+    float activation;
+};
+
+RWStructuredBuffer<GPUNeuron> _Neurons;
+
+int _NeuronCount;  // Pass count as parameter instead of querying
+float _DeltaTime;
+float _Time;
+float _Speed;
+float _Damping;
+int _EnableMovement;
+
+// Random activation parameters
+int _RandomActivation;
+float _ActivationChangeSpeed;
+int _NumActiveNeurons;
+
+// Simple hash function for pseudo-random numbers
+float hash(float n)
+{
+    return frac(sin(n) * 43758.5453123);
+}
+
+[numthreads(64,1,1)]
+void UpdateNeurons (uint3 id : SV_DispatchThreadID)
+{
+    uint idx = id.x;
+    
+    // Use passed-in count instead of GetDimensions
+    if (idx >= (uint)_NeuronCount) return;
+    
+    GPUNeuron neuron = _Neurons[idx];
+    
+    // === RANDOM ACTIVATION FOR TESTING ===
+    if (_RandomActivation > 0)
+    {
+        // Create time-varying random pattern
+        float timeHash = hash(_Time * 0.5);
+        float neuronHash = hash(float(idx) * 0.001 + timeHash);
+        
+        // Determine if this neuron should be active
+        float activeThreshold = float(_NumActiveNeurons) / float(_NeuronCount);
+        
+        if (neuronHash < activeThreshold)
+        {
+            // Gradually increase activation
+            float targetActivation = hash(float(idx) * 0.01 + _Time * 0.1);
+            neuron.activation = lerp(neuron.activation, targetActivation, _ActivationChangeSpeed * _DeltaTime);
+        }
+        else
+        {
+            // Gradually decrease activation
+            neuron.activation = lerp(neuron.activation, 0.0, _ActivationChangeSpeed * _DeltaTime);
+        }
+        
+        // Clamp activation between 0 and 1
+        neuron.activation = saturate(neuron.activation);
+    }
+    
+    // === OPTIONAL MOVEMENT BASED ON ACTIVATION ===
+    if (_EnableMovement > 0 && neuron.activation > 0.5)
+    {
+        // Generate pseudo-random direction
+        float idxFloat = float(idx);
+        float3 randomDir = normalize(float3(
+            sin(idxFloat * 12.9898 + _Time * 0.5),
+            cos(idxFloat * 78.233 + _Time * 0.5),
+            sin(idxFloat * 45.164 + _Time * 0.5)
+        ));
+        
+        // Apply force based on activation
+        neuron.velocity += randomDir * neuron.activation * 0.3 * _DeltaTime;
+    }
+    
+    // Apply damping to velocity
+    neuron.velocity *= (1.0 - _Damping * _DeltaTime);
+    
+    // Update position
+    neuron.position += neuron.velocity * _Speed * _DeltaTime;
+    
+    // Write back to buffer
+    _Neurons[idx] = neuron;
+}

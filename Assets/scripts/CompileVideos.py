@@ -4,6 +4,7 @@
 
 ### Data source Scott Lab and analysis by Wei Quin
 ### Visualisations by Amanda Belton, Wei Quin and Ethan Scott
+### Refactored using copilot Claude
 
 import os
 from Videoprocessing import (
@@ -21,7 +22,7 @@ def main():
     fish_list = ['Fish62']
     start_time = 2606
     end_time = 2956
-    crop_config = CropConfig(100, 0, 1800, 1080)
+    crop_config = CropConfig(100, 0, 1500, 1080)
     
     print('########## ZFin3D: Compile Videos from png frame files')
     

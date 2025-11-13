@@ -7,8 +7,8 @@ class VideoConfig:
         self.interpolation_frames = 2
         self.output_fps = 60
         self.codec = 'mp4v'
-        self.parent_directory = "../../SignalDataFrames"
-        self.output_directory = "../../Videos"
+        self.parent_directory = "SignalDataFrames"
+        self.output_directory = "Videos"
         
     def validate(self):
         """Validate configuration"""

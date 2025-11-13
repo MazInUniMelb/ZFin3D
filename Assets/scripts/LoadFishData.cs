@@ -1042,11 +1042,8 @@ private IEnumerator BulkExportAllFramesCoroutine()
         int startFrame = currentSignalTimestamp >= 0 ? currentSignalTimestamp : 0;
         int endFrame = Math.Min(startFrame + nbrFrames, numTimestamps - 1);
 
+        // Export frames with brain rotation
         StartCoroutine(ExportFramesCoroutine(startFrame, endFrame, exportPath));
-        //StartCoroutine(StepThroughSeizureData(0, numTimestamps, .001f, exportFrames: true, exportPath));
-        //StartCoroutine(RotateBrainDuringSeizure());
-        //StartCoroutine(StepThroughSeizureData(3400, 3450, .1f, exportFrames: true, exportPath));
-
     }
     
     
@@ -1093,23 +1090,16 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         string regionID = selectedRegion.Replace(" ", "").Substring(0, Math.Min(5, selectedRegion.Replace(" ", "").Length));
         string framefile = Path.Combine(exportPath, $"{selectedFish}_{regionID}_{frame:D05}.png");
         
-        // Use simple screenshot - no complex rendering
+        // Create high-res screenshot
         CaptureHighResScreenshot(framefile,true);
         
         yield return new WaitForSeconds(0.01f);
     }
-
-
-    foreach (BrainData brain in brains)
-        {
-            // restore to original position and rotation
-            brain.ResetToOriginalTransform();
-        }
     
     Debug.Log($"Frame export completed: {endFrame - startFrame} frames exported to {exportPath}");
-    
-    // Show UI again
-    uiHandler.ShowMenuPanel();
+    statusMessage.text = $"Frame export completed: {endFrame - startFrame} frames exported to {exportPath}";
+    // Return brains to original postion and show UI again
+    FinishSeizureAnimation();
 }
 
     private void CaptureHighResScreenshot(string filepath, bool useCustomResolution = true)
@@ -1127,6 +1117,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
 
         List<Camera> allCams = cameraHandler.fsCameras;
         allCams.Add(cameraHandler.lineGraphCamera); 
+        allCams.Add(cameraHandler.backgroundCamera);
         foreach (Camera cam in cameraHandler.fsCameras)
         {
             if (cam != null && cam.gameObject.activeInHierarchy)
@@ -1203,8 +1194,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         // If animation is running, stop it 
         if (isSeizureDataRunning)
         {
-            StopSeizureAnimation();
-            return; // Exit early, don't process position updates during animation
+            FinishSeizureAnimation();
         }
 
         if (timelineMarker != null && timelinePoints.Count > 0)
@@ -1243,13 +1233,15 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
                 {
                     neuron.Deactivate();
                 }
+                Debug.Log($"selected region: {selectedRegion}, fish: {selectedFish}, timestamp: {closestIdx}");
 
                 activeNeurons.Clear();
                 foreach (BrainData brain in brains)
                 {
-                    if (selectedRegion == "Whole Brain")
+                    if ((selectedRegion == "Whole Brain") || string.IsNullOrEmpty(selectedRegion))
                     {
                         // Activate neurons for this timestamp
+                        Debug.Log("Activate neurons for whole brain");
                         activeNeurons.AddRange(brain.GetActiveNeurons(selectedFish, closestIdx));
                     }
                     else
@@ -1344,12 +1336,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
 
         // Cleanup and UI restoration
         ResetEndMarker(startTimestamp);
-        uiHandler.ShowMenuPanel();
-        
-        if (exportFrames)
-        {
-            Debug.Log($"Frames exported to {exportPath}");
-        }
+        FinishSeizureAnimation();
     }
 
 
@@ -1397,7 +1384,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
 
     }
 
-    private void StopSeizureAnimation()
+    private void FinishSeizureAnimation()
     {
         if (isSeizureDataRunning)
         {

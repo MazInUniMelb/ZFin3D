@@ -66,7 +66,7 @@ class VideoProcessor:
         """Process and write all frames to video"""
         frame_count = 0
         
-        for i in range(len(frames) - 1):
+        for i in range(len(frames)):
             try:
                 # Process current frame
                 current_frame = processor.load_and_process_frame(
@@ -74,26 +74,30 @@ class VideoProcessor:
                 )
                 writer.write(current_frame)
                 frame_count += 1
+
+                # Frame repetition
+                if False:
+                    for _ in range(self.config['frame_repeat_count']):
+                        writer.write(current_frame)
+                        frame_count += 1
                 
                 # Process next frame
                 next_frame = processor.load_and_process_frame(
                     os.path.join(input_dir, frames[i + 1])
                 )
                 
-                # Frame repetition
-                for _ in range(self.config['frame_repeat_count']):
-                    writer.write(next_frame)
-                    frame_count += 1
+
                 
-                # Interpolation
-                interpolated = processor.interpolate_frames(
-                    current_frame, next_frame, 
-                    self.config['interpolation_frames']
-                )
-                
-                for interp_frame in interpolated:
-                    writer.write(interp_frame)
-                    frame_count += 1
+                # interpolate 
+                if False:
+                    interpolated = processor.interpolate_frames(
+                        current_frame, next_frame, 
+                        self.config['interpolation_frames']
+                    )
+                    
+                    for interp_frame in interpolated:
+                        writer.write(interp_frame)
+                        frame_count += 1
                     
             except Exception as e:
                 print(f"Error processing frame {i}: {e}")

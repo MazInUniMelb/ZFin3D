@@ -88,6 +88,10 @@ public class LoadFishData : MonoBehaviour
     [Tooltip("The filename of the CSV file containing position data")]
     public string postionsFile = "ZF.calcium_position_data.csv";
 
+
+    [Tooltip("Colour featureset brains differently")]
+    public bool useFeatureColours = true;
+
     [Tooltip("The selected fish to load")]
     public string selectedFish = "";
 
@@ -104,6 +108,9 @@ public class LoadFishData : MonoBehaviour
 
     [Tooltip("Rotation speed of brain during seizure data animation")]
     public float rotationSpeed = 20f;
+
+    [Tooltip("Rotate additional brains (first brain always rotates regardless)")]
+    public bool rotateAdditionalBrains = true;
 
     [Tooltip("Start position of line graph showing total signal for timestamp")]
     public Vector3 szLeftPos;
@@ -1046,16 +1053,11 @@ private IEnumerator BulkExportAllFramesCoroutine()
 private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string exportPath)
 {
     Debug.Log($"Starting frame export: {startFrame} to {endFrame}");
-    
+
     // Calculate rotation per frame (fixed amount for consistent export)
     float rotationPerFrame = rotationSpeed * 0.5f; // Adjust as needed
-    
-    // Store original brain transforms
-    Dictionary<BrainData, Quaternion> originalRotations = new Dictionary<BrainData, Quaternion>();
-    foreach (BrainData brain in brains)
-    {
-        originalRotations[brain] = brain.transform.rotation;
-    }
+    Vector3 centroid = Vector3.zero;
+    bool rotateThisBrain = false;
     
     for (int frame = startFrame; frame <= endFrame; frame++)
         {
@@ -1072,10 +1074,18 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         yield return null; // One frame to ensure all visual updates
         
         foreach (BrainData brain in brains)
-        {
-            Vector3 centroid = brain.bounds.center;
-            brain.transform.RotateAround(centroid, Vector3.up, rotationPerFrame);
-        }
+            {
+                if (brain == brains[0])
+                    rotateThisBrain = true;
+                else
+                    rotateThisBrain = rotateAdditionalBrains;
+                if (rotateThisBrain)
+                {
+                    centroid = brain.bounds.center;
+                    brain.transform.RotateAround(centroid, Vector3.up, rotationPerFrame);
+                }
+            }
+
         
         yield return new WaitForEndOfFrame();
         
@@ -1084,16 +1094,17 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         string framefile = Path.Combine(exportPath, $"{selectedFish}_{regionID}_{frame:D05}.png");
         
         // Use simple screenshot - no complex rendering
-        ScreenCapture.CaptureScreenshot(framefile);
+        CaptureHighResScreenshot(framefile,true);
         
         yield return new WaitForSeconds(0.01f);
     }
-    
-    // Restore original brain rotations
-    foreach (var kvp in originalRotations)
-    {
-        kvp.Key.transform.rotation = kvp.Value;
-    }
+
+
+    foreach (BrainData brain in brains)
+        {
+            // restore to original position and rotation
+            brain.ResetToOriginalTransform();
+        }
     
     Debug.Log($"Frame export completed: {endFrame - startFrame} frames exported to {exportPath}");
     
@@ -1106,28 +1117,27 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
     if (useCustomResolution && cameraHandler?.mainCamera != null)
         {
 
-        int screenWidth = Screen.width;
-        int screenHeight = Screen.height;
-        
         // Create render texture at custom resolution
         RenderTexture finalTexture = new RenderTexture(exportWidth, exportHeight, 24);
         RenderTexture.active = finalTexture;
         GL.Clear(true, true, Color.black);
-        
+
         // Render each camera with its viewport settings
         RenderCameraToTexture(cameraHandler.mainCamera, finalTexture);
-        
-        foreach (Camera fsCam in cameraHandler.fsCameras)
+
+        List<Camera> allCams = cameraHandler.fsCameras;
+        allCams.Add(cameraHandler.lineGraphCamera); 
+        foreach (Camera cam in cameraHandler.fsCameras)
         {
-            if (fsCam != null && fsCam.gameObject.activeInHierarchy)
+            if (cam != null && cam.gameObject.activeInHierarchy)
             {
-                RenderCameraToTexture(fsCam, finalTexture);
+                RenderCameraToTexture(cam, finalTexture);
             }
         }
         
         // Read the final composite
-        Texture2D screenshot = new Texture2D(screenWidth, screenHeight, TextureFormat.RGB24, false);
-        screenshot.ReadPixels(new Rect(0, 0, screenWidth, screenHeight), 0, 0);
+        Texture2D screenshot = new Texture2D(exportWidth, exportHeight, TextureFormat.RGB24, false);
+        screenshot.ReadPixels(new Rect(0, 0, exportWidth, exportHeight), 0, 0);
         screenshot.Apply();
         
         // Save the image
@@ -1138,8 +1148,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         RenderTexture.active = null;
         UnityEngine.Object.DestroyImmediate(screenshot);
         UnityEngine.Object.DestroyImmediate(finalTexture);
-        
-        Debug.Log($"Composite high-res screenshot saved: {filepath}");
+
     }
     else
     {
@@ -1353,35 +1362,26 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
             yield return null;
         }
         
-        // Calculate rotation per frame based on export mode
-        bool isExporting = (Time.timeScale < 0.01f || Time.deltaTime < 0.002f);
         float rotationPerFrame;
-        
-        if (isExporting)
-        {
-            // For export mode: use fixed rotation amount per frame
-            rotationPerFrame = rotationSpeed * 0.5f; // Adjust this value as needed
-            Debug.Log($"Export mode detected: Using fixed rotation per frame: {rotationPerFrame}");
-        }
-        else
-        {
-            // For normal playback: use Time.deltaTime
-            rotationPerFrame = rotationSpeed * Time.deltaTime;
-        }
+        Vector3 centroid = Vector3.zero;
+        bool rotateThisBrain = false;
 
+        // For normal playback: use Time.deltaTime
+        rotationPerFrame = rotationSpeed * Time.deltaTime;
+        
         // Continuously rotate while seizure data is playing
         while (isSeizureDataRunning)
         {
             // Rotate each brain around its centroid every frame
             foreach (BrainData brain in brains)
             {
-                Vector3 centroid = brain.bounds.center;
-                if (isExporting)
-                {
-                    brain.transform.RotateAround(centroid, Vector3.up, rotationPerFrame);
-                }
+                if (brain == brains[0])
+                    rotateThisBrain = true;
                 else
+                    rotateThisBrain = rotateAdditionalBrains;
+                if (rotateThisBrain)
                 {
+                    centroid = brain.bounds.center;
                     brain.transform.RotateAround(centroid, Vector3.up, rotationSpeed * Time.deltaTime);
                 }
             }
@@ -1662,6 +1662,10 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
             {
                 // Set new position for cloned neuron
                 Vector3 newPosition = neuron.originalPosition + new Vector3(distBtwnBrains, 0, 0);
+                if (!useFeatureColours){
+                    featureColor = neuron.color; // retain original color
+                }
+                
                 NeuronData newNeuron = neuron.CopyNeuron(newBrain, newPosition, featureColor);
                 
                 HighlightSphere originalHighlight = neuron.highlightSphere;

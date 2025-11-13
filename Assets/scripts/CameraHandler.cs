@@ -10,6 +10,7 @@ public class CameraHandler : MonoBehaviour
     public Camera dorsalCamera;
     public Camera ventralCamera;
     public Camera sagittalCamera;
+    public Camera backgroundCamera;
 
     [Header("FeatureSet View")]
     public Camera featureSetCamera;
@@ -44,7 +45,12 @@ public class CameraHandler : MonoBehaviour
 
         // setup linegraph camera to show timeline view precisely
         lineGraphCamera.orthographic = true;
-        lineGraphCamera.orthographicSize = 200f; 
+        lineGraphCamera.orthographicSize = 200f;
+
+        // set up background camera to render after everthing else
+        backgroundCamera.depth = -10;
+        backgroundCamera.clearFlags = CameraClearFlags.Skybox;
+        backgroundCamera.enabled = false;
     }
 
     public Camera CreateFeaturesetCamera(string featureSet)
@@ -72,27 +78,38 @@ public class CameraHandler : MonoBehaviour
     lineGraphCamera.clearFlags = CameraClearFlags.Depth;
     lineGraphCamera.depth = 1;
 
-    // Calculate viewport width for each brain
-    float viewportWidth = 1f / brainCameras.Count;
-
-        for (int i = 0; i < brainCameras.Count; i++)
+    int nbrBrains = brainCameras.Count;
+    float viewportWidth = 1f;
+        if (nbrBrains <= 2)
         {
-            Camera brainCamera = brainCameras[i];
-
-            if (brainCamera == null)
-            {
-                Debug.LogWarning($"Brain camera at index {i} is null!");
-                continue;
-            }
-
-            // Enable and position each brain's camera
-            //brainCamera.enabled = true;
-            brainCamera.rect = new Rect(i * viewportWidth, 0f, viewportWidth, 0.8f);
-            brainCamera.clearFlags = CameraClearFlags.Skybox;
-            brainCamera.depth = i == 0 ? 0 : (i + 1); // Main camera depth 0, others start at 2
-
-            Debug.Log($"Camera {i} '{brainCamera.name}' viewport: x={i * viewportWidth:F2}, width={viewportWidth:F2}");
+            // Calculate viewport width to be a bit narrow for fewer brains
+            viewportWidth = .75f / brainCameras.Count;
+            backgroundCamera.rect = new Rect(.75f, 0f, 0.25f, 0.8f);
+            backgroundCamera.enabled = true;
         }
+    else
+        {
+            backgroundCamera.enabled = false;
+        }
+
+    for (int i = 0; i < brainCameras.Count; i++)
+    {
+        Camera brainCamera = brainCameras[i];
+
+        if (brainCamera == null)
+        {
+            Debug.LogWarning($"Brain camera at index {i} is null!");
+            continue;
+        }
+
+        // Enable and position each brain's camera
+        //brainCamera.enabled = true;
+        brainCamera.rect = new Rect(i * viewportWidth, 0f, viewportWidth, 0.8f);
+        brainCamera.clearFlags = CameraClearFlags.Skybox;
+        brainCamera.depth = i == 0 ? 0 : (i + 1); // Main camera depth 0, others start at 2
+
+        Debug.Log($"Camera {i} '{brainCamera.name}' viewport: x={i * viewportWidth:F2}, width={viewportWidth:F2}");
+    }
 
     // Disable any unused feature set cameras (only those not in the active list)
     DisableUnusedCameras(brainCameras);

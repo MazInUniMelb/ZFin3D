@@ -3,25 +3,39 @@
 
 struct GPUNeuron
 {
-    float3 position;
-    float3 velocity;
-    float3 color;
-    float activation;
+    float4 position;
+    float4 originalPosition;
+    float4 velocity;
+    float4 color;
+    float4 activationAndPadding; // x = activation, yzw = unused
 };
 
 RWStructuredBuffer<GPUNeuron> _Neurons;
+StructuredBuffer<float> _Activations;
 
-int _NeuronCount;  // Pass count as parameter instead of querying
+int _NeuronCount;
 float _DeltaTime;
 float _Time;
 float _Speed;
 float _Damping;
 int _EnableMovement;
 
+// Timeseries parameters
+int _UseTimeseries;
+int _CurrentTimeStep;
+float _TimeInterpolation;
+int _TimeSteps;
+
 // Random activation parameters
 int _RandomActivation;
 float _ActivationChangeSpeed;
 int _NumActiveNeurons;
+
+// Rotation parameters
+float _RotationAngle;
+float3 _RotationAxis;
+float3 _BrainCenter;
+int _ApplyRotation;
 
 // Simple hash function for pseudo-random numbers
 float hash(float n)
@@ -29,46 +43,89 @@ float hash(float n)
     return frac(sin(n) * 43758.5453123);
 }
 
+// Rotation function - Metal compatible
+float3 RotatePointAroundAxis(float3 p, float3 ax, float ang)
+{
+    float3 a = normalize(ax);
+    float s = sin(ang);
+    float c = cos(ang);
+    float oc = 1.0 - c;
+    
+    float3 row0 = float3(oc * a.x * a.x + c, oc * a.x * a.y - a.z * s, oc * a.z * a.x + a.y * s);
+    float3 row1 = float3(oc * a.x * a.y + a.z * s, oc * a.y * a.y + c, oc * a.y * a.z - a.x * s);
+    float3 row2 = float3(oc * a.z * a.x - a.y * s, oc * a.y * a.z + a.x * s, oc * a.z * a.z + c);
+    
+    return float3(dot(row0, p), dot(row1, p), dot(row2, p));
+}
+
+float GetTimeseriesActivation(int neuronIndex, int timeStep)
+{
+    int index = neuronIndex * _TimeSteps + timeStep;
+    return _Activations[index];
+}
+
+float GetInterpolatedActivation(int neuronIndex, int currentStep)
+{
+    float current = GetTimeseriesActivation(neuronIndex, currentStep);
+    
+    if (currentStep >= _TimeSteps - 1)
+        return current;
+    
+    float next = GetTimeseriesActivation(neuronIndex, currentStep + 1);
+    return lerp(current, next, _TimeInterpolation);
+}
+
 [numthreads(64,1,1)]
 void UpdateNeurons (uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     
-    // Use passed-in count instead of GetDimensions
     if (idx >= (uint)_NeuronCount) return;
     
     GPUNeuron neuron = _Neurons[idx];
     
-    // === RANDOM ACTIVATION FOR TESTING ===
-    if (_RandomActivation > 0)
+    // === TIMESERIES ACTIVATION ===
+    if (_UseTimeseries > 0)
     {
-        // Create time-varying random pattern
+        neuron.activationAndPadding.x = GetInterpolatedActivation(idx, _CurrentTimeStep);
+    }
+    // === RANDOM ACTIVATION FOR TESTING ===
+    else if (_RandomActivation > 0)
+    {
         float timeHash = hash(_Time * 0.5);
         float neuronHash = hash(float(idx) * 0.001 + timeHash);
         
-        // Determine if this neuron should be active
         float activeThreshold = float(_NumActiveNeurons) / float(_NeuronCount);
         
         if (neuronHash < activeThreshold)
         {
-            // Gradually increase activation
             float targetActivation = hash(float(idx) * 0.01 + _Time * 0.1);
-            neuron.activation = lerp(neuron.activation, targetActivation, _ActivationChangeSpeed * _DeltaTime);
+            neuron.activationAndPadding.x = lerp(neuron.activationAndPadding.x, targetActivation, _ActivationChangeSpeed * _DeltaTime);
         }
         else
         {
-            // Gradually decrease activation
-            neuron.activation = lerp(neuron.activation, 0.0, _ActivationChangeSpeed * _DeltaTime);
+            neuron.activationAndPadding.x = lerp(neuron.activationAndPadding.x, 0.0, _ActivationChangeSpeed * _DeltaTime);
         }
         
-        // Clamp activation between 0 and 1
-        neuron.activation = saturate(neuron.activation);
+        neuron.activationAndPadding.x = saturate(neuron.activationAndPadding.x);
+    }
+    
+    // === ROTATION: Always rotate from ORIGINAL position ===
+    if (_ApplyRotation > 0)
+    {
+        float3 origPos = neuron.originalPosition.xyz;
+        float3 relativePos = origPos - _BrainCenter;
+        float3 rotatedPos = RotatePointAroundAxis(relativePos, _RotationAxis, _RotationAngle);
+        neuron.position.xyz = rotatedPos + _BrainCenter;
+    }
+    else
+    {
+        neuron.position.xyz = neuron.originalPosition.xyz;
     }
     
     // === OPTIONAL MOVEMENT BASED ON ACTIVATION ===
-    if (_EnableMovement > 0 && neuron.activation > 0.5)
+    if (_EnableMovement > 0 && neuron.activationAndPadding.x > 0.5)
     {
-        // Generate pseudo-random direction
         float idxFloat = float(idx);
         float3 randomDir = normalize(float3(
             sin(idxFloat * 12.9898 + _Time * 0.5),
@@ -76,16 +133,14 @@ void UpdateNeurons (uint3 id : SV_DispatchThreadID)
             sin(idxFloat * 45.164 + _Time * 0.5)
         ));
         
-        // Apply force based on activation
-        neuron.velocity += randomDir * neuron.activation * 0.3 * _DeltaTime;
+        neuron.velocity.xyz += randomDir * neuron.activationAndPadding.x * 0.3 * _DeltaTime;
+        neuron.velocity.xyz *= (1.0 - _Damping * _DeltaTime);
+        neuron.position.xyz += neuron.velocity.xyz * _Speed * _DeltaTime;
+    }
+    else
+    {
+        neuron.velocity = float4(0, 0, 0, 0);
     }
     
-    // Apply damping to velocity
-    neuron.velocity *= (1.0 - _Damping * _DeltaTime);
-    
-    // Update position
-    neuron.position += neuron.velocity * _Speed * _DeltaTime;
-    
-    // Write back to buffer
     _Neurons[idx] = neuron;
 }

@@ -6,6 +6,7 @@ public class CameraHandler : MonoBehaviour
 
     [Header("Camera References")]
     public Camera mainCamera;
+    public Camera frontalViewCamera;
     public Camera lineGraphCamera;
     public Camera dorsalCamera;
     public Camera ventralCamera;
@@ -67,19 +68,19 @@ public class CameraHandler : MonoBehaviour
 
         return featureSetCamera;
     }
-    
+
     public void SetupViewports(List<Camera> brainCameras)
-{
-    Debug.Log($"Setting up viewports for {brainCameras.Count} brain cameras");
+    {
+        Debug.Log($"Setting up viewports for {brainCameras.Count} brain cameras");
 
-    // Always enable line graph camera at top
-    lineGraphCamera.enabled = true;
-    lineGraphCamera.rect = new Rect(0f, 0.8f, 1f, 0.2f);
-    lineGraphCamera.clearFlags = CameraClearFlags.Depth;
-    lineGraphCamera.depth = 1;
+        // Always enable line graph camera at top
+        lineGraphCamera.enabled = true;
+        lineGraphCamera.rect = new Rect(0f, 0.8f, 1f, 0.2f);
+        lineGraphCamera.clearFlags = CameraClearFlags.Depth;
+        lineGraphCamera.depth = 1;
 
-    int nbrBrains = brainCameras.Count;
-    float viewportWidth = 1f;
+        int nbrBrains = brainCameras.Count;
+        float viewportWidth = 1f;
         if (nbrBrains <= 2)
         {
             // Calculate viewport width to be a bit narrow for fewer brains
@@ -87,33 +88,33 @@ public class CameraHandler : MonoBehaviour
             backgroundCamera.rect = new Rect(.75f, 0f, 0.25f, 0.8f);
             backgroundCamera.enabled = true;
         }
-    else
+        else
         {
             backgroundCamera.enabled = false;
         }
 
-    for (int i = 0; i < brainCameras.Count; i++)
-    {
-        Camera brainCamera = brainCameras[i];
-
-        if (brainCamera == null)
+        for (int i = 0; i < brainCameras.Count; i++)
         {
-            Debug.LogWarning($"Brain camera at index {i} is null!");
-            continue;
+            Camera brainCamera = brainCameras[i];
+
+            if (brainCamera == null)
+            {
+                Debug.LogWarning($"Brain camera at index {i} is null!");
+                continue;
+            }
+
+            // Enable and position each brain's camera
+            //brainCamera.enabled = true;
+            brainCamera.rect = new Rect(i * viewportWidth, 0f, viewportWidth, 0.8f);
+            brainCamera.clearFlags = CameraClearFlags.Skybox;
+            brainCamera.depth = i == 0 ? 0 : (i + 1); // Main camera depth 0, others start at 2
+
+            Debug.Log($"Camera {i} '{brainCamera.name}' viewport: x={i * viewportWidth:F2}, width={viewportWidth:F2}");
         }
 
-        // Enable and position each brain's camera
-        //brainCamera.enabled = true;
-        brainCamera.rect = new Rect(i * viewportWidth, 0f, viewportWidth, 0.8f);
-        brainCamera.clearFlags = CameraClearFlags.Skybox;
-        brainCamera.depth = i == 0 ? 0 : (i + 1); // Main camera depth 0, others start at 2
-
-        Debug.Log($"Camera {i} '{brainCamera.name}' viewport: x={i * viewportWidth:F2}, width={viewportWidth:F2}");
+        // Disable any unused feature set cameras (only those not in the active list)
+        DisableUnusedCameras(brainCameras);
     }
-
-    // Disable any unused feature set cameras (only those not in the active list)
-    DisableUnusedCameras(brainCameras);
-}
 
     public Vector3 SetupMainCameraView(Vector3 centerPos, float extent)
     {
@@ -123,7 +124,7 @@ public class CameraHandler : MonoBehaviour
             return Vector3.zero;
         }
 
-        centerPoint.x = centerPos.x+50f; // shift to right slightly
+        centerPoint.x = centerPos.x + 50f; // shift to right slightly
 
         Debug.Log($"Positioning cameras to center: {centerPos}, extent: {extent}");
 
@@ -155,32 +156,32 @@ public class CameraHandler : MonoBehaviour
     }
 
     public Vector3 PositionFeatureSetCamera(Camera fsCamera, Vector3 centerPos, float extent)
+    {
+        if (centerPos == null)
         {
-            if (centerPos == null)
-            {
-                Debug.LogWarning("No centroid position provided for camera positioning.");
-                return Vector3.zero;
-            }
-
-            Debug.Log($"Positioning feature set camera {fsCamera.name} to center: {centerPos}, extent: {extent}");
-
-            // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)
-            Vector3 mainViewDir = Vector3.back;      // -Z
-
-            // Use the extent to set the distance
-            float minDistance = 600f; // Set based on your scene scale
-            float maxDistance = 1500f;
-            float distance = Mathf.Clamp(extent * 2f, minDistance, maxDistance);
-
-            // Feature set camera
-
-            Vector3 newCameraPos = centerPos + mainViewDir * distance;
-            fsCamera.transform.position = newCameraPos;
-            fsCamera.transform.LookAt(centerPos);
-            fsCamera.fieldOfView = FOVzoomedout;
-
-            return centerPoint;
+            Debug.LogWarning("No centroid position provided for camera positioning.");
+            return Vector3.zero;
         }
+
+        Debug.Log($"Positioning feature set camera {fsCamera.name} to center: {centerPos}, extent: {extent}");
+
+        // Calculate the direction from which you want to view (e.g., Z for main, X for lateral, Y for ventral)
+        Vector3 mainViewDir = Vector3.back;      // -Z
+
+        // Use the extent to set the distance
+        float minDistance = 600f; // Set based on your scene scale
+        float maxDistance = 1500f;
+        float distance = Mathf.Clamp(extent * 2f, minDistance, maxDistance);
+
+        // Feature set camera
+
+        Vector3 newCameraPos = centerPos + mainViewDir * distance;
+        fsCamera.transform.position = newCameraPos;
+        fsCamera.transform.LookAt(centerPos);
+        fsCamera.fieldOfView = FOVzoomedout;
+
+        return centerPoint;
+    }
 
 
     public Vector3 PositionMainCamera(Vector3 centerPos, float extent)
@@ -211,7 +212,7 @@ public class CameraHandler : MonoBehaviour
 
         return centerPoint;
     }
-    
+
     private void DisableUnusedCameras(List<Camera> activeCameras)
     {
         // Disable any feature set cameras that aren't in the active list

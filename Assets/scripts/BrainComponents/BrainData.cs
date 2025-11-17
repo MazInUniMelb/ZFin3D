@@ -87,6 +87,7 @@ namespace BrainComponents
         {
             transform.position = originalPosition;
             transform.rotation = originalRotation;
+            originalCentroid = bounds.center;
         }
     }
 }

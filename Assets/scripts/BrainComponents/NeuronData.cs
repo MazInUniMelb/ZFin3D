@@ -79,8 +79,8 @@ namespace BrainComponents
         public void Activate()
         {
             isActive = true;
-            // renderer.material.SetColor("_EmissionColor", color * 2.0f); // Bright emission
-            // renderer.material.SetColor("_BaseColor", color);
+            renderer.material.SetColor("_EmissionColor", color * 2.0f); // Bright emission
+            renderer.material.SetColor("_BaseColor", color);
             highlightSphere.TurnOn();
         }
 
@@ -88,8 +88,8 @@ namespace BrainComponents
         public void Deactivate()
         {
             isActive = false;
-            // renderer.material.SetColor("_EmissionColor", color * 0.1f); // Dim emission
-            // renderer.material.SetColor("_BaseColor", color * 0.5f);
+            renderer.material.SetColor("_EmissionColor", color * 0.1f); // Dim emission
+            renderer.material.SetColor("_BaseColor", color * 0.5f);
             highlightSphere.TurnOff();
         }
 

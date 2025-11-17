@@ -2371,7 +2371,7 @@ MonoBehaviour:
   selectedRegion: 
   wholeBrain: Brain0
   animationStepInterval: 0.5
-  nbrFrames: 350
+  nbrFrames: 50
   rotationSpeed: 1
   rotateAdditionalBrains: 0
   szLeftPos: {x: -1400, y: 5000, z: 650}

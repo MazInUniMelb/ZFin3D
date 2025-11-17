@@ -112,6 +112,9 @@ public class LoadFishData : MonoBehaviour
     [Tooltip("Rotate additional brains (first brain always rotates regardless)")]
     public bool rotateAdditionalBrains = true;
 
+    [Tooltip("Swoop camera in and out during seizure data animation")]
+    public bool swoopCamera = false;
+
     [Tooltip("Start position of line graph showing total signal for timestamp")]
     public Vector3 szLeftPos;
     [Tooltip("End position of line graph showing total signal for timestamp")]
@@ -841,8 +844,495 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
 
         StartCoroutine(StepThroughSeizureData(markerTimestamp, endTimestamp, animationStepInterval, exportFrames: false));
         StartCoroutine(RotateBrainDuringSeizure());
+        if (swoopCamera)
+        {
+            StartCoroutine(SwoopCameraDuringSeizure());
+        }
     }
 
+
+IEnumerator SwoopCameraDuringSeizure()
+
+
+
+{
+
+
+
+    int swoopTimeDelay = 10;
+
+
+
+    // Wait for seizure data to start
+
+
+
+    while (!isSeizureDataRunning)
+
+
+
+        yield return null;
+
+
+
+
+
+
+
+    // Safety checks
+
+
+
+    if (brains == null || brains.Count == 0 || cameraHandler == null || cameraHandler.mainCamera == null)
+
+
+
+    {
+
+
+
+        Debug.LogWarning("Cannot swoop camera: missing brains or camera.");
+
+
+
+        yield break;
+
+
+
+    }
+
+
+
+
+
+
+
+    Vector3 brainCenter = brains[0].bounds.center;
+
+
+
+    Vector3 p0 = cameraHandler.mainCamera.transform.position;
+
+
+
+    Quaternion originalCameraRotation = cameraHandler.mainCamera.transform.rotation;
+
+
+
+
+
+
+
+    // Desired distance from brain centre for final position
+
+
+
+    float desiredDistance = 10f;
+
+
+
+
+
+
+
+    // Compute target position on same hemisphere as original
+
+
+
+    Vector3 fromCenterToCamera = (p0 - brainCenter);
+
+
+
+    if (fromCenterToCamera.sqrMagnitude < 0.0001f)
+
+
+
+        fromCenterToCamera = new Vector3(0, 0, -1); // fallback
+
+
+
+
+
+
+
+    Vector3 direction = fromCenterToCamera.normalized;
+
+
+
+    Vector3 p3 = brainCenter + direction * desiredDistance;
+
+
+
+
+
+
+
+    // Build control points to create an arc above the midpoint
+
+
+
+    Vector3 mid = (p0 + p3) * 0.5f;
+
+
+
+    float arcHeight = Mathf.Max(Mathf.Min((p0 - p3).magnitude * 0.3f, 300f), 50f); // scale arc by distance
+
+
+
+    Vector3 upOffset = Vector3.up * arcHeight;
+
+
+
+
+
+
+
+    Vector3 c1 = Vector3.Lerp(p0, mid, 0.5f) + upOffset;
+
+
+
+    Vector3 c2 = Vector3.Lerp(mid, p3, 0.5f) + upOffset;
+
+
+
+
+
+
+
+    // Duration and safety
+
+
+
+    float swoopDuration = Mathf.Max((endTimestamp - startTimestamp) * animationStepInterval, 0.5f);
+
+
+
+    float elapsedTime = 0f;
+
+
+
+
+
+
+
+    // Convert configured delay in timestamps to seconds and clamp to < swoopDuration
+
+
+
+    float configuredDelay = Mathf.Max(0, swoopTimeDelay) * animationStepInterval;
+
+
+
+    float delaySeconds = Mathf.Clamp(configuredDelay, 0f, swoopDuration * 0.9f);
+
+
+
+
+
+
+
+    // Movement duration after the hold
+
+
+
+    float moveDuration = Mathf.Max(swoopDuration - delaySeconds, 0.0001f);
+
+
+
+
+
+
+
+    // smoothing parameters
+
+
+
+    float positionSmoothSpeed = 5f;
+
+
+
+    float rotationSmoothSpeed = 5f;
+
+
+
+    Vector3 currentPos = cameraHandler.mainCamera.transform.position;
+
+
+
+    Quaternion currentRot = cameraHandler.mainCamera.transform.rotation;
+
+
+
+
+
+
+
+    // Cubic ease-in-out helper
+
+
+
+    Func<float, float> EaseInOutCubic = (t) =>
+
+
+
+    {
+
+
+
+        return t < 0.5f ? 4f * t * t * t : 1f - Mathf.Pow(-2f * t + 2f, 3f) / 2f;
+
+
+
+    };
+
+
+
+
+
+
+
+    // Hold start pose once while delaying to avoid per-frame resets
+
+
+
+    bool holdPoseSet = false;
+
+
+
+
+
+
+
+    while (isSeizureDataRunning && elapsedTime < swoopDuration)
+
+
+
+    {
+
+
+
+        if (elapsedTime < delaySeconds)
+
+
+
+        {
+
+
+
+            if (!holdPoseSet)
+
+
+
+            {
+
+
+
+                // ensure exact start pose while waiting
+
+
+
+                cameraHandler.mainCamera.transform.position = p0;
+
+
+
+                cameraHandler.mainCamera.transform.rotation = originalCameraRotation;
+
+
+
+                holdPoseSet = true;
+
+
+
+                currentPos = p0;
+
+
+
+                currentRot = originalCameraRotation;
+
+
+
+            }
+
+
+
+        }
+
+
+
+        else
+
+
+
+        {
+
+
+
+            // map elapsedTime into movement phase [0..1]
+
+
+
+            float moveTime = elapsedTime - delaySeconds;
+
+
+
+            float rawT = Mathf.Clamp01(moveTime / moveDuration);
+
+
+
+            float easedT = EaseInOutCubic(rawT);
+
+
+
+
+
+
+
+            // Cubic Bezier interpolation (use easedT from movement phase)
+
+
+
+            float u = 1f - easedT;
+
+
+
+            Vector3 targetPos =
+
+
+
+                u * u * u * p0 +
+
+
+
+                3f * u * u * easedT * c1 +
+
+
+
+                3f * u * easedT * easedT * c2 +
+
+
+
+                easedT * easedT * easedT * p3;
+
+
+
+
+
+
+
+            // Orientation: look toward the brain centre from current position
+
+
+
+            Vector3 lookDir = (brainCenter - targetPos).normalized;
+
+
+
+            Quaternion targetRot = currentRot;
+
+
+
+            if (lookDir.sqrMagnitude > 0.0001f)
+
+
+
+            {
+
+
+
+                targetRot = Quaternion.LookRotation(lookDir, Vector3.up);
+
+
+
+            }
+
+
+
+
+
+
+
+            float posLerp = 1f - Mathf.Exp(-positionSmoothSpeed * Time.deltaTime);
+
+
+
+            float rotLerp = 1f - Mathf.Exp(-rotationSmoothSpeed * Time.deltaTime);
+
+
+
+
+
+
+
+            currentPos = Vector3.Lerp(currentPos, targetPos, posLerp);
+
+
+
+            currentRot = Quaternion.Slerp(currentRot,targetRot,rotLerp);
+
+
+
+
+
+
+
+            cameraHandler.mainCamera.transform.position = currentPos;
+
+
+
+            cameraHandler.mainCamera.transform.rotation = currentRot;
+
+
+
+        }
+
+
+
+
+
+
+
+        elapsedTime += Time.deltaTime;
+
+
+
+        yield return null;
+
+
+
+    }
+
+
+
+
+
+
+
+    // Finalize exact pose
+
+
+
+    if (cameraHandler?.mainCamera != null)
+
+
+
+
+    {
+
+
+
+        cameraHandler.mainCamera.transform.position = p3;
+
+
+
+        cameraHandler.mainCamera.transform.rotation = Quaternion.LookRotation(brainCenter - p3, Vector3.up);
+
+
+
+    }
+
+
+
+}
 
 public void BulkLoadAllFish()
 {

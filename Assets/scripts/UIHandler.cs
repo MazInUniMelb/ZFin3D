@@ -110,6 +110,7 @@ public class UIHandler : MonoBehaviour
     public void ShowMenuPanel()
     {
         menuParentObject.SetActive(true);
+        EnableActionButtons();
         Debug.Log("Returned to choose fish panel");
         // if fish and region are selected enable actionbutton by retriggerin fish selection
         //OnFishDropdownChanged(fishDropdown.value);

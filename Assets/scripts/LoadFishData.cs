@@ -1719,31 +1719,8 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
                 Debug.Log($"set start timestamp to: {startTimestamp}");
                 uiHandler.startTimeText.text = startTimestamp.ToString();
                 uiHandler.endTimeText.text = endTimestamp.ToString();
-                foreach (NeuronData neuron in activeNeurons)
-                {
-                    neuron.Deactivate();
-                }
-                Debug.Log($"selected region: {selectedRegion}, fish: {selectedFish}, timestamp: {closestIdx}");
 
-                activeNeurons.Clear();
-                foreach (BrainData brain in brains)
-                {
-                    if ((selectedRegion == "Whole Brain") || string.IsNullOrEmpty(selectedRegion))
-                    {
-                        // Activate neurons for this timestamp
-                        Debug.Log("Activate neurons for whole brain");
-                        activeNeurons.AddRange(brain.GetActiveNeurons(selectedFish, closestIdx));
-                    }
-                    else
-                    {
-                        // Activate neurons for this timestamp
-                        activeNeurons.AddRange(brain.regions[selectedRegion].GetActiveNeurons(selectedFish, closestIdx));
-                    }
-                }
-                foreach (NeuronData neuron in activeNeurons)
-                {
-                    neuron.SetActiveState(selectedFish, closestIdx);
-                }
+                UpdateNeuronStates(currentSignalTimestamp, selectedFish, selectedRegion);
             }
             ResetEndMarker(endTimestamp);
         }
@@ -1897,28 +1874,12 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
 
     private void UpdateNeuronStates(int timestamp, string fishName, string regionName)
     {
-        foreach (NeuronData neuron in activeNeurons)
-        {
-            neuron.Deactivate();
-        }
-        activeNeurons.Clear();
-
         foreach (BrainData brain in brains)
         {
-            if((regionName == "Whole Brain") || string.IsNullOrEmpty(regionName))
+            foreach (NeuronData neuron in brain.neurons)
             {
-                // Activate neurons for this timestamp
-                activeNeurons.AddRange(brain.GetActiveNeurons(fishName, timestamp));
-            }
-            else
-            {
-                // Activate neurons for this timestamp
-                activeNeurons.AddRange(brain.regions[regionName].GetActiveNeurons(fishName, timestamp));
-            }
-        }
-        foreach (NeuronData neuron in activeNeurons)
-        {
             neuron.SetActiveState(fishName, timestamp);
+            }
         }
     }
 

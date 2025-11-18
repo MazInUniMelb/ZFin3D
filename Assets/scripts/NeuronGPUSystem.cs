@@ -34,6 +34,9 @@ public class NeuronGPUSystem : MonoBehaviour
     public Mesh sphereMesh;
     public float neuronSize = 0.5f;
 
+    [Header("UI")]
+    public UITimeSeries uiTimeSeries; 
+
     [Header("Timeseries Playback")]
     public bool useTimeseries = false;
     public bool autoPlay = false;
@@ -100,6 +103,8 @@ public class NeuronGPUSystem : MonoBehaviour
         { "Medulla", new Color(1f, 0.5f, 0.2f) },
         { "None", Color.white }
     };
+
+    private int[] totalActivations = new int[0];
 
     void Start()
     {
@@ -303,6 +308,7 @@ public class NeuronGPUSystem : MonoBehaviour
 
         // Pre-allocate flat array for all activation data
         float[] allActivations = new float[neuronCount * timeSteps];
+        totalActivations = new int[timeSteps];
 
         // Second pass: read activation data
         int rowIdx = 0;
@@ -331,6 +337,7 @@ public class NeuronGPUSystem : MonoBehaviour
                     if (float.TryParse(values[firstActivityColIdx + col], out float value))
                     {
                         allActivations[baseIndex + col] = value;
+                        totalActivations[col] += value > 0f ? 1 : 0;
                     }
                     else
                     {
@@ -360,6 +367,13 @@ public class NeuronGPUSystem : MonoBehaviour
         currentTimeStep = 0;
 
         Debug.Log("Timeseries data loaded successfully");
+
+        if(uiTimeSeries != null)
+        {
+            uiTimeSeries.generateTimeSeries = false;
+            uiTimeSeries.nPoints = timeSteps;
+            uiTimeSeries.TimeseriesFromData(totalActivations);
+        }
     }
 
     string CleanAndExtractFirstRegion(string regionList)
@@ -535,6 +549,8 @@ public class NeuronGPUSystem : MonoBehaviour
                     autoPlay = false;
                 }
             }
+
+            uiTimeSeries?.SetMarkerPosition(currentTimeStep);
         }
 
         // Update compute shader with current timestep
@@ -699,18 +715,12 @@ public class NeuronGPUSystem : MonoBehaviour
 
     public void StepForward()
     {
-        if (!timeseriesLoaded) return;
-        currentTimeStep = (currentTimeStep + 1) % timeSteps;
-        playbackTime = currentTimeStep;
-        Debug.Log($"Timestep: {currentTimeStep}/{timeSteps}");
+        SetTimeStep((currentTimeStep + 1) % timeSteps);
     }
 
     public void StepBackward()
     {
-        if (!timeseriesLoaded) return;
-        currentTimeStep = (currentTimeStep - 1 + timeSteps) % timeSteps;
-        playbackTime = currentTimeStep;
-        Debug.Log($"Timestep: {currentTimeStep}/{timeSteps}");
+        SetTimeStep((currentTimeStep - 1 + timeSteps) % timeSteps);
     }
 
     public void SetTimeStep(int step)
@@ -718,6 +728,8 @@ public class NeuronGPUSystem : MonoBehaviour
         if (!timeseriesLoaded) return;
         currentTimeStep = Mathf.Clamp(step, 0, timeSteps - 1);
         playbackTime = currentTimeStep;
+        Debug.Log($"Timestep: {currentTimeStep}/{timeSteps}");
+        uiTimeSeries?.SetMarkerPosition(currentTimeStep);
     }
 
     public void SetPlaybackSpeed(float fps)
@@ -754,5 +766,10 @@ public class NeuronGPUSystem : MonoBehaviour
         neuronBuffer?.Release();
         activationBuffer?.Release();
         argsBuffer?.Release();
+    }
+
+    public void OnTimeseriesMarkerMoved(int index)
+    {
+        SetTimeStep(index);
     }
 }

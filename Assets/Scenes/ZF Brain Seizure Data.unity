@@ -2364,8 +2364,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 408881398b3c64c03ae7742506a2d97d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  useObjectPooling: 1
   dataFolder: Assets/Data
-  postionsFile: fish_roi_Ethanvideo.csv
+  postionsFile: fish_ROI_GT.csv
   useFeatureColours: 0
   selectedFish: 
   selectedRegion: 
@@ -2407,6 +2408,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   mainCamera: {fileID: 691615890}
+  frontalViewCamera: {fileID: 0}
   lineGraphCamera: {fileID: 521845576}
   dorsalCamera: {fileID: 599331762}
   ventralCamera: {fileID: 518659657}

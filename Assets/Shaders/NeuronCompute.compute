@@ -7,7 +7,7 @@ struct GPUNeuron
     float4 originalPosition;
     float4 velocity;
     float4 color;
-    float4 activationAndPadding; // x = activation, yzw = unused
+    float4 activationAndPadding; // x = raw activation, y = display activation (with decay)
 };
 
 RWStructuredBuffer<GPUNeuron> _Neurons;
@@ -25,6 +25,10 @@ int _UseTimeseries;
 int _CurrentTimeStep;
 float _TimeInterpolation;
 int _TimeSteps;
+
+// Decay parameters
+int _UseActivationDecay;
+float _DecayRate;
 
 // Random activation parameters
 int _RandomActivation;
@@ -84,12 +88,13 @@ void UpdateNeurons (uint3 id : SV_DispatchThreadID)
     
     GPUNeuron neuron = _Neurons[idx];
     
-    // === TIMESERIES ACTIVATION ===
+    float rawActivation = 0.0;
+    
+    // === GET RAW ACTIVATION ===
     if (_UseTimeseries > 0)
     {
-        neuron.activationAndPadding.x = GetInterpolatedActivation(idx, _CurrentTimeStep);
+        rawActivation = GetInterpolatedActivation(idx, _CurrentTimeStep);
     }
-    // === RANDOM ACTIVATION FOR TESTING ===
     else if (_RandomActivation > 0)
     {
         float timeHash = hash(_Time * 0.5);
@@ -100,14 +105,43 @@ void UpdateNeurons (uint3 id : SV_DispatchThreadID)
         if (neuronHash < activeThreshold)
         {
             float targetActivation = hash(float(idx) * 0.01 + _Time * 0.1);
-            neuron.activationAndPadding.x = lerp(neuron.activationAndPadding.x, targetActivation, _ActivationChangeSpeed * _DeltaTime);
+            rawActivation = lerp(neuron.activationAndPadding.x, targetActivation, _ActivationChangeSpeed * _DeltaTime);
         }
         else
         {
-            neuron.activationAndPadding.x = lerp(neuron.activationAndPadding.x, 0.0, _ActivationChangeSpeed * _DeltaTime);
+            rawActivation = lerp(neuron.activationAndPadding.x, 0.0, _ActivationChangeSpeed * _DeltaTime);
         }
         
-        neuron.activationAndPadding.x = saturate(neuron.activationAndPadding.x);
+        rawActivation = saturate(rawActivation);
+    }
+    
+    // Store raw activation
+    neuron.activationAndPadding.x = rawActivation;
+    
+    // === CALCULATE DISPLAY ACTIVATION WITH DECAY ===
+    if (_UseActivationDecay > 0)
+    {
+        // Get current display activation
+        float displayActivation = neuron.activationAndPadding.y;
+        
+        // If raw activation is higher, spike up immediately
+        if (rawActivation > displayActivation)
+        {
+            displayActivation = rawActivation;
+        }
+        else
+        {
+            // Otherwise decay exponentially
+            displayActivation *= (1.0 - _DecayRate);
+        }
+        
+        // Store display activation
+        neuron.activationAndPadding.y = displayActivation;
+    }
+    else
+    {
+        // No decay - display activation equals raw activation
+        neuron.activationAndPadding.y = rawActivation;
     }
     
     // === ROTATION: Always rotate from ORIGINAL position ===
@@ -123,8 +157,8 @@ void UpdateNeurons (uint3 id : SV_DispatchThreadID)
         neuron.position.xyz = neuron.originalPosition.xyz;
     }
     
-    // === OPTIONAL MOVEMENT BASED ON ACTIVATION ===
-    if (_EnableMovement > 0 && neuron.activationAndPadding.x > 0.5)
+    // === OPTIONAL MOVEMENT BASED ON DISPLAY ACTIVATION ===
+    if (_EnableMovement > 0 && neuron.activationAndPadding.y > 0.5)
     {
         float idxFloat = float(idx);
         float3 randomDir = normalize(float3(
@@ -133,7 +167,7 @@ void UpdateNeurons (uint3 id : SV_DispatchThreadID)
             sin(idxFloat * 45.164 + _Time * 0.5)
         ));
         
-        neuron.velocity.xyz += randomDir * neuron.activationAndPadding.x * 0.3 * _DeltaTime;
+        neuron.velocity.xyz += randomDir * neuron.activationAndPadding.y * 0.3 * _DeltaTime;
         neuron.velocity.xyz *= (1.0 - _Damping * _DeltaTime);
         neuron.position.xyz += neuron.velocity.xyz * _Speed * _DeltaTime;
     }

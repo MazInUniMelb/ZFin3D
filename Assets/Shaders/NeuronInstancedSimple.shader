@@ -27,7 +27,7 @@ Shader "Custom/NeuronInstancedSimple"
                 float4 originalPosition;
                 float4 velocity;
                 float4 color;
-                float4 activationAndPadding;
+                float4 activationAndPadding; // x = raw, y = display
             };
 
             StructuredBuffer<GPUNeuron> _Neurons;
@@ -50,8 +50,8 @@ Shader "Custom/NeuronInstancedSimple"
                 
                 GPUNeuron neuron = _Neurons[instanceID];
                 
-                // Extract activation from activationAndPadding.x
-                float activation = neuron.activationAndPadding.x;
+                // Use DISPLAY activation (with decay) for rendering
+                float activation = neuron.activationAndPadding.y;
                 
                 float scale = _Size * lerp(0.9, 1.1, activation);
                 float3 worldPos = vertex.xyz * scale + neuron.position.xyz;

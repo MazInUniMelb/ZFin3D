@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System;
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct GPUNeuron
@@ -11,13 +12,19 @@ public struct GPUNeuron
     public Vector4 originalPosition;
     public Vector4 velocity;
     public Vector4 color;
-    public Vector4 activationAndPadding; // x = activation, yzw = padding
+    public Vector4 activationAndPadding; // x = raw activation from timeseries, y = display activation (with decay)
 
-    // Helper property for easier access
+    // Helper properties
     public float activation
     {
         get { return activationAndPadding.x; }
         set { activationAndPadding.x = value; }
+    }
+
+    public float displayActivation
+    {
+        get { return activationAndPadding.y; }
+        set { activationAndPadding.y = value; }
     }
 }
 
@@ -34,6 +41,13 @@ public class NeuronGPUSystem : MonoBehaviour
     public Mesh sphereMesh;
     public float neuronSize = 0.5f;
 
+    [Header("Activation Decay")]
+    public bool useActivationDecay = true;
+    public int decayFrames = 30; // N frames to decay
+    public AnimationCurve decayCurve = AnimationCurve.EaseInOut(0, 1, 1, 0); // Decay curve
+
+    private float decayRate; // Calculated from decayFrames
+
     [Header("UI")]
     public UITimeSeries uiTimeSeries; 
 
@@ -43,6 +57,8 @@ public class NeuronGPUSystem : MonoBehaviour
     public float playbackSpeed = 60f; // Frames per second
     public bool loop = true;
     public int currentTimeStep = 0;
+    public int firstActivationOffset = -50;
+    public int firstActivationIndex = 0;
 
     [Header("Test Activation (when not using timeseries)")]
     public bool randomActivation = true;
@@ -68,6 +84,7 @@ public class NeuronGPUSystem : MonoBehaviour
     public Key activateKey = Key.Space;
     public float activationOnClick = 1.0f;
     public float selectionRadius = 2f;
+    public BrainCameraController cameraController;
 
     [Header("Brain Rotation")]
     public bool enableRotation = true;
@@ -106,6 +123,7 @@ public class NeuronGPUSystem : MonoBehaviour
 
     private int[] totalActivations = new int[0];
 
+
     void Start()
     {
         // Initialize Input System devices
@@ -116,6 +134,9 @@ public class NeuronGPUSystem : MonoBehaviour
         {
             Debug.LogWarning("Mouse or Keyboard not detected by Input System");
         }
+
+        // Calculate decay rate
+        UpdateDecayRate();
 
         if (!ValidateReferences()) return;
 
@@ -138,6 +159,24 @@ public class NeuronGPUSystem : MonoBehaviour
                 PositionCamera();
             }
         }
+    }
+
+
+    void UpdateDecayRate()
+    {
+        // Calculate decay rate so that activation reaches 0 after N frames
+        // Using exponential decay: value = initial * (1 - decayRate)^frames
+        // We want: 0.01 = 1.0 * (1 - decayRate)^decayFrames (decay to 1% = effectively 0)
+        if (decayFrames > 0)
+        {
+            decayRate = 1f - Mathf.Pow(0.01f, 1f / decayFrames);
+        }
+        else
+        {
+            decayRate = 1f; // Instant decay
+        }
+
+        Debug.Log($"Decay rate calculated: {decayRate:F4} for {decayFrames} frames");
     }
 
     bool ValidateReferences()
@@ -351,6 +390,7 @@ public class NeuronGPUSystem : MonoBehaviour
 
         Debug.Log($"Loaded {allActivations.Length} activation values ({allActivations.Length * 4 / 1024f / 1024f:F2} MB)");
 
+
         // Create activation buffer
         activationBuffer = new ComputeBuffer(allActivations.Length, sizeof(float));
         activationBuffer.SetData(allActivations);
@@ -374,6 +414,11 @@ public class NeuronGPUSystem : MonoBehaviour
             uiTimeSeries.nPoints = timeSteps;
             uiTimeSeries.TimeseriesFromData(totalActivations);
         }
+
+        firstActivationIndex = Array.FindIndex(totalActivations, x => x > 0);
+        SetTimeStep(firstActivationIndex + firstActivationOffset);
+
+        cameraController?.SetBrainCenter(GetBrainCenter());
     }
 
     string CleanAndExtractFirstRegion(string regionList)
@@ -549,14 +594,17 @@ public class NeuronGPUSystem : MonoBehaviour
                     autoPlay = false;
                 }
             }
-
-            uiTimeSeries?.SetMarkerPosition(currentTimeStep);
         }
+        uiTimeSeries?.SetMarkerPosition(currentTimeStep);
 
         // Update compute shader with current timestep
         neuronCompute.SetInt("_UseTimeseries", 1);
         neuronCompute.SetInt("_CurrentTimeStep", currentTimeStep);
         neuronCompute.SetFloat("_TimeInterpolation", playbackTime - currentTimeStep);
+
+        // Set decay parameters
+        neuronCompute.SetInt("_UseActivationDecay", useActivationDecay ? 1 : 0);
+        neuronCompute.SetFloat("_DecayRate", decayRate);
 
         // Set rotation parameters
         neuronCompute.SetFloat("_RotationAngle", currentRotationAngle * Mathf.Deg2Rad);
@@ -579,6 +627,10 @@ public class NeuronGPUSystem : MonoBehaviour
 
     void UpdateRandomActivation()
     {
+        // Set decay parameters
+        neuronCompute.SetInt("_UseActivationDecay", useActivationDecay ? 1 : 0);
+        neuronCompute.SetFloat("_DecayRate", decayRate);
+
         // Set rotation parameters
         neuronCompute.SetFloat("_RotationAngle", currentRotationAngle * Mathf.Deg2Rad);
         neuronCompute.SetVector("_RotationAxis", rotationAxis.normalized);
@@ -599,6 +651,7 @@ public class NeuronGPUSystem : MonoBehaviour
         int threadGroups = Mathf.CeilToInt(neuronCount / 64f);
         neuronCompute.Dispatch(kernelHandle, threadGroups, 1, 1);
     }
+
 
     void RenderNeurons()
     {
@@ -761,15 +814,65 @@ public class NeuronGPUSystem : MonoBehaviour
         }
     }
 
-    void OnDestroy()
+    public Vector3 GetBrainCenter()
     {
-        neuronBuffer?.Release();
-        activationBuffer?.Release();
-        argsBuffer?.Release();
+        return renderBounds.center;
+    }
+
+    public float GetBrainSize()
+    {
+        return renderBounds.size.magnitude;
+    }
+
+    public Bounds GetBrainBounds()
+    {
+        return renderBounds;
+    }
+
+
+    void OnValidate()
+    {
+        // Recalculate decay rate when parameters change in inspector
+        UpdateDecayRate();
+    }
+
+    void OnGUI()
+    {
+        if (!initialized) return;
+
+        // Display info in top-left corner
+        GUILayout.BeginArea(new Rect(10, 10, 300, 200));
+        GUILayout.Label($"Timestep: {currentTimeStep} / {timeSteps}");
+        GUILayout.Label($"Total Activations at Timestep: {totalActivations[currentTimeStep]}");
+        GUILayout.Label($"Decay Frames: {decayFrames}");
+        GUILayout.Label($"Decay Rate: {decayRate:F4}");
+        GUILayout.Label($"Speed: {playbackSpeed:F1} fps");
+        GUILayout.EndArea();
     }
 
     public void OnTimeseriesMarkerMoved(int index)
     {
         SetTimeStep(index);
+    }
+
+    public Vector3 GetNeuronPosition(int neuronIndex)
+    {
+        if (neuronIndex < 0 || neuronIndex >= neuronCount)
+            return Vector3.zero;
+
+        return new Vector3(
+            neuronDataCache[neuronIndex].position.x,
+            neuronDataCache[neuronIndex].position.y,
+            neuronDataCache[neuronIndex].position.z
+        );
+    }
+
+
+
+    void OnDestroy()
+    {
+        neuronBuffer?.Release();
+        activationBuffer?.Release();
+        argsBuffer?.Release();
     }
 }

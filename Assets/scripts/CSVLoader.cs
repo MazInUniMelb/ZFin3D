@@ -16,6 +16,7 @@ namespace BrainComponents
             public List<NeuronPositionData> neurons = new List<NeuronPositionData>();
             public HashSet<string> featureSets = new HashSet<string>();
             public Dictionary<string, List<NeuronPositionData>> neuronsByRegion = new Dictionary<string, List<NeuronPositionData>>();
+            public Dictionary<string, Color> regionColors = new Dictionary<string, Color>();
         }
 
         public class NeuronPositionData
@@ -25,6 +26,7 @@ namespace BrainComponents
             public string region;
             public string subregion;
             public string label;
+            public Color color;
             public HashSet<string> features = new HashSet<string>();
         }
 
@@ -41,7 +43,7 @@ namespace BrainComponents
         public delegate void OnSeizureDataLoaded(SeizureDataResult result);
         public delegate void OnError(string error);
 
-        // Static coroutine runner for non-MonoBehaviour access
+        // Static coroutine runner
         private static CSVLoaderRunner runner;
         private static CSVLoaderRunner GetRunner()
         {
@@ -54,11 +56,23 @@ namespace BrainComponents
             return runner;
         }
 
+        // Region colors dictionary
+        private static readonly Dictionary<string, Color> regionColours = new Dictionary<string, Color>
+        {
+            { "Diencephalon", new Color(0.4f, 1f, 0.3843f) },
+            { "Mesencephalon", new Color(0.4588f, 0.5529f, 0.3843f) },
+            { "Rhombencephalon", new Color(0f, 0.6275f,1f) },
+            { "Telencephalon", new Color(1f, 0.5412f, 0.7647f) },
+            { "Ganglia", new Color(0.4588f, 0.4392f, 0.7019f) },
+            { "Spinal", new Color(0.4588f, 0.4392f, 0.7019f) },
+            { "None", new Color(0.4588f, 0.4392f, 0.7019f) }
+        };
+
         // Main loading methods
         public static void LoadPositionData(string dataFolder, string filename,
-            OnPositionDataLoaded onComplete, OnError onError = null, OnProgressUpdate onProgress = null)
+            OnPositionDataLoaded onComplete, OnError onError = null, OnProgressUpdate onProgress = null, bool useSWCIndex = true)
         {
-            GetRunner().StartCoroutine(LoadPositionDataCoroutine(dataFolder, filename, onComplete, onError, onProgress));
+            GetRunner().StartCoroutine(LoadPositionDataCoroutine(dataFolder, filename, onComplete, onError, onProgress, useSWCIndex));
         }
 
         public static void LoadSeizureData(string dataFolder, string filename, string fishName,
@@ -67,9 +81,25 @@ namespace BrainComponents
             GetRunner().StartCoroutine(LoadSeizureDataCoroutine(dataFolder, filename, fishName, onComplete, onError, onProgress));
         }
 
-        // Position data loading coroutine
+        // Get available fish files
+        public static Dictionary<string, string> GetFishNamesAndFiles(string dataFolder)
+        {
+            return Directory.GetFiles(dataFolder, "fish*_signal.csv")
+                .Select(Path.GetFileName)
+                .Where(f => System.Text.RegularExpressions.Regex.IsMatch(f, @"fish(\d+)_signal"))
+                .ToDictionary(
+                    f =>
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(f, @"fish(\d+)_signal");
+                        return match.Success ? "Fish" + match.Groups[1].Value : Path.GetFileNameWithoutExtension(f);
+                    },
+                    f => f
+                );
+        }
+
+        // Position data loading coroutine with chunked processing
         private static IEnumerator LoadPositionDataCoroutine(string dataFolder, string filename,
-            OnPositionDataLoaded onComplete, OnError onError, OnProgressUpdate onProgress)
+            OnPositionDataLoaded onComplete, OnError onError, OnProgressUpdate onProgress, bool useSWCIndex)
         {
             string fullPath = Path.Combine(dataFolder, filename);
             if (!File.Exists(fullPath))
@@ -79,24 +109,32 @@ namespace BrainComponents
             }
 
             PositionDataResult result = new PositionDataResult();
+            result.regionColors = new Dictionary<string, Color>(regionColours);
+
             int lineCount = 0;
-            int totalLines = File.ReadLines(fullPath).Count() - 1; // Exclude header
+            int totalLines = 0;
+
+            // Count lines first
+            using (var reader = new StreamReader(fullPath))
+            {
+                reader.ReadLine(); // Skip header
+                while (reader.ReadLine() != null) totalLines++;
+            }
 
             using (var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 131072))
             using (var reader = new StreamReader(fileStream))
             {
-                // Read header
+                // Read and validate header
                 string headerLine = reader.ReadLine();
                 string[] headers = headerLine.Split(',');
 
-                // Validate headers
                 if (!ValidatePositionHeaders(headers))
                 {
                     onError?.Invoke("Unexpected CSV format in position file");
                     yield break;
                 }
 
-                // Find feature set columns
+                // Extract feature sets
                 int featureSetStartIndex = 7;
                 for (int i = featureSetStartIndex; i < headers.Length; i++)
                 {
@@ -107,13 +145,14 @@ namespace BrainComponents
                 int chunkSize = 500;
                 int processedInChunk = 0;
                 string line;
+                int lineIdx = 0;
 
                 while ((line = reader.ReadLine()) != null)
                 {
                     string[] values = line.Split(',');
                     if (values.Length < 6) continue;
 
-                    if (TryParseNeuronPosition(values, headers, out NeuronPositionData neuronData))
+                    if (TryParseNeuronPosition(values, headers, lineIdx, useSWCIndex, out NeuronPositionData neuronData))
                     {
                         result.neurons.Add(neuronData);
 
@@ -124,6 +163,7 @@ namespace BrainComponents
                     }
 
                     lineCount++;
+                    lineIdx++;
                     processedInChunk++;
 
                     if (processedInChunk >= chunkSize)
@@ -131,7 +171,7 @@ namespace BrainComponents
                         float progress = (float)lineCount / totalLines;
                         onProgress?.Invoke(progress, $"Loading positions: {lineCount}/{totalLines}");
                         processedInChunk = 0;
-                        yield return null; // Yield control back to Unity
+                        yield return null;
                     }
                 }
             }
@@ -140,7 +180,7 @@ namespace BrainComponents
             onComplete?.Invoke(result);
         }
 
-        // Seizure data loading coroutine
+        // Seizure data loading with optimized chunked processing
         private static IEnumerator LoadSeizureDataCoroutine(string dataFolder, string filename, string fishName,
             OnSeizureDataLoaded onComplete, OnError onError, OnProgressUpdate onProgress)
         {
@@ -153,7 +193,7 @@ namespace BrainComponents
 
             SeizureDataResult result = new SeizureDataResult();
 
-            // Fast file analysis first
+            // Fast file analysis
             using (var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 131072))
             using (var reader = new StreamReader(fileStream))
             {
@@ -175,7 +215,7 @@ namespace BrainComponents
 
             onProgress?.Invoke(0.1f, $"Found {result.numCols} timestamps for {result.numRows} neurons");
 
-            // Process data in chunks
+            // Process in larger chunks for better performance
             yield return ProcessSeizureDataChunked(fullPath, fishName, result, onProgress);
 
             onComplete?.Invoke(result);
@@ -184,7 +224,7 @@ namespace BrainComponents
         private static IEnumerator ProcessSeizureDataChunked(string fullPath, string fishName,
             SeizureDataResult result, OnProgressUpdate onProgress)
         {
-            // Pre-allocate arrays for performance
+            // Pre-allocate arrays
             char[] separators = { ',' };
             string[] reusableStringArray = new string[result.numCols + 20];
             float[] reusableFloatArray = new float[result.numCols];
@@ -195,7 +235,7 @@ namespace BrainComponents
 
             int firstActivityColIdx = 10;
             int rowIdx = 0;
-            int chunkSize = 100;
+            int chunkSize = 250; // Larger chunks for seizure data
             int processedInChunk = 0;
 
             using (var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 262144))
@@ -216,11 +256,10 @@ namespace BrainComponents
 
                         if (validCount > 0)
                         {
-                            // Store activity data
                             if (!result.neuronActivityData.ContainsKey(rowIdx))
                                 result.neuronActivityData[rowIdx] = new Dictionary<string, List<int>>();
 
-                            result.neuronActivityData[rowIdx][fishName] = reusableBinaryArray.Take(validCount).ToList();
+                            result.neuronActivityData[rowIdx][fishName] = new List<int>(reusableBinaryArray.Take(validCount));
                         }
                     }
 
@@ -253,19 +292,22 @@ namespace BrainComponents
                    headers[6].Trim() == "Label";
         }
 
-        private static bool TryParseNeuronPosition(string[] values, string[] headers, out NeuronPositionData data)
+        private static bool TryParseNeuronPosition(string[] values, string[] headers, int lineIdx,
+            bool useSWCIndex, out NeuronPositionData data)
         {
             data = new NeuronPositionData();
 
-            if (!int.TryParse(values[0], out data.neuronIdx))
+            if (!int.TryParse(values[0], out int swcIndex))
                 return false;
+
+            data.neuronIdx = useSWCIndex ? swcIndex : lineIdx;
 
             if (!float.TryParse(values[1], out float x) ||
                 !float.TryParse(values[2], out float y) ||
                 !float.TryParse(values[3], out float z))
                 return false;
 
-            data.position = new Vector3(x, y, z * 3f); // Scale z
+            data.position = new Vector3(x, y, z * 3f);
 
             string regionList = values[4].Trim();
             data.region = CleanList(regionList)
@@ -275,6 +317,9 @@ namespace BrainComponents
 
             data.subregion = values[5].Trim();
             data.label = $"Regions: {CleanList(regionList)}\nSubregions: {CleanList(values[5])}";
+
+            // Set color based on region
+            data.color = regionColours.TryGetValue(data.region, out Color c) ? c : Color.white;
 
             // Parse features
             for (int i = 7; i < values.Length && i < headers.Length; i++)
@@ -332,7 +377,6 @@ namespace BrainComponents
             return validCount;
         }
 
-        // MonoBehaviour helper for running coroutines
         private class CSVLoaderRunner : MonoBehaviour { }
     }
 }

@@ -81,6 +81,8 @@ public class LoadFishData : MonoBehaviour
 
     // variables for panel in editor
     [Header("Fish Data")]
+    public bool useObjectPooling = true;
+
     [Header("Data Sources")]
     [Tooltip("The folder path containing data files")]
     public string dataFolder = "Assets/Data";
@@ -238,40 +240,143 @@ public class LoadFishData : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        DirectoryInfo dir = new DirectoryInfo(dataFolder);
-
         statusMessage.text = "Loading initial position data ...";
         selectedFish = "";
         selectedRegion = "";
         uiHandler.DisableActionButtons();
 
-        BrainData thisBrain = LoadAllNeuronData(postionsFile, "Brain0");
+        // Prewarm neuron object pool (without mesh/material)
+        NeuronObjectPool.Instance.PrewarmPool(5000);
+
+        // Use the new CSV loader
+        CSVLoader.LoadPositionData(dataFolder, postionsFile,
+            onComplete: (result) => OnPositionDataLoaded(result),
+            onError: (error) =>
+            {
+                Debug.LogError(error);
+                statusMessage.text = error;
+            },
+            onProgress: (progress, message) => statusMessage.text = message
+        );
+    }
 
 
-        // Populate fishFileDict with fish name as key and filename as value
-        fishFileDict = getFishNamesAndFiles(dataFolder);
+    private void OnPositionDataLoaded(CSVLoader.PositionDataResult result)
+    {
+        // Create brain from loaded data
+        BrainData thisBrain = CreateBrainFromPositionData(result, "Brain0");
+
+        // Get fish files using static method
+        fishFileDict = CSVLoader.GetFishNamesAndFiles(dataFolder);
         List<string> fishNames = fishFileDict.Keys.ToList();
-        // set fishdropdown text to 'select fish'
-        fishNames.Insert(0, "Select Fish"); // Add prompt as first item
-        uiHandler.fishDropdown.value = 0; // Select the prompt by default
+        fishNames.Insert(0, "Select Fish");
+        uiHandler.fishDropdown.value = 0;
         uiHandler.PopulateFishDropdown(fishNames);
 
         List<string> regionNames = thisBrain.regions.Keys.ToList();
-        // insert "Whole Brain" at start of list
         regionNames.Insert(0, "Whole Brain");
-
-        // set regiondropdown text to 'select region'
-        regionNames.Insert(0, "Select Region"); // Add prompt as first item
-        uiHandler.regionDropdown.value = 0; // Select the prompt by default
+        regionNames.Insert(0, "Select Region");
+        uiHandler.regionDropdown.value = 0;
         uiHandler.PopulateRegionDropdown(regionNames);
 
         cameraHandler.SetupMainCameraView(thisBrain.bounds.center, thisBrain.bounds.extents.magnitude);
-        // build up the view of brain, region by region
-        StartCoroutine(ShowRegionsStepByStep(animationStepInterval, thisBrain)); // Enables each region every .5 seconds
+        StartCoroutine(ShowRegionsStepByStep(animationStepInterval, thisBrain));
         statusMessage.text = "Select a fish to load seizure data. This takes around a minute to load.";
-
     }
 
+    private BrainData CreateBrainFromPositionData(CSVLoader.PositionDataResult data, string brainName)
+    {
+        GameObject obj = new GameObject(brainName);
+        BrainData brain = obj.AddComponent<BrainData>();
+        brain.activeFeatureSets = data.featureSets;
+
+        // Create regions
+        foreach (var regionName in data.neuronsByRegion.Keys)
+        {
+            GameObject regionObj = new GameObject(regionName);
+            RegionData region = regionObj.AddComponent<RegionData>();
+            region.name = regionName;
+            region.color = data.regionColors.TryGetValue(regionName, out Color c) ? c : Color.white;
+            region.brain = brain;
+            brain.regions[regionName] = region;
+            region.transform.SetParent(brain.transform, false);
+            region.gameObject.SetActive(false);
+        }
+
+        // Create neurons using object pool
+        foreach (var neuronData in data.neurons)
+        {
+            GameObject neuronObj = useObjectPooling ? NeuronObjectPool.Instance.GetNeuron() : new GameObject($"Neuron_{neuronData.neuronIdx}");
+            neuronObj.name = $"Neuron_{neuronData.neuronIdx}";
+
+            NeuronData neuron = neuronObj.GetComponent<NeuronData>();
+
+            // Set properties BEFORE initialization
+            neuron.neuronIdx = neuronData.neuronIdx;
+            neuron.originalPosition = neuronData.position;
+            neuron.color = neuronData.color;
+            neuron.brain = brain;
+            neuron.region = brain.regions[neuronData.region];
+            neuron.subregion = neuronData.subregion;
+            neuron.label = neuronData.label;
+            neuron.activeNeuronSize = activeNeuronSize;
+            neuron.inactiveNeuronSize = inactiveNeuronSize;
+
+            // Set hierarchy BEFORE setting position
+            neuron.transform.SetParent(neuron.region.gameObject.transform, false);
+
+            // NOW set the actual transform position
+            neuron.transform.position = neuronData.position;
+
+            // Initialize the neuron AFTER all properties are set
+            neuron.InitNeuron(sphereMesh, glowMaterial, inactiveNeuronSize);
+
+            // Set features
+            if (neuron.featureData == null)
+            {
+                neuron.featureData = new FeatureData();
+            }
+            foreach (var feature in neuronData.features)
+            {
+                neuron.featureData.AddFeature(feature);
+            }
+
+            // Add to collections
+            brain.AddNeuron(neuron);
+            neuron.region.AddNeuron(neuron);
+        }
+
+        // Store transform and setup camera
+        brain.StoreOriginalTransform();
+        brain.assignedCamera = cameraHandler.mainCamera;
+        brains.Add(brain);
+
+        // Create feature set brains
+        CreateFeatureSetBrains(data, brain);
+
+        return brain;
+    }
+
+
+    private void CreateFeatureSetBrains(CSVLoader.PositionDataResult data, BrainData mainBrain)
+    {
+        int brainIdx = 1;
+        foreach (string featureSet in data.featureSets)
+        {
+            Color featureColor = brainColours.ContainsKey(brainIdx)
+                ? brainColours[brainIdx]
+                : brainColours.Values.First();
+
+            Debug.Log($"Cloning feature set '{featureSet}' into Brain{brainIdx} with color {featureColor}");
+
+            BrainData featureBrain = CloneFeatureSetNeurons(mainBrain, $"Brain{brainIdx}", featureSet,
+                distBtwnBrains * brainIdx, featureColor);
+            featureBrain.StoreOriginalTransform();
+            featureBrain.assignedCamera = cameraHandler.CreateFeaturesetCamera(featureSet);
+            brains.Add(featureBrain);
+            brainIdx++;
+        }
+    }
 
     // Update is called once per frame
     void Update()
@@ -298,27 +403,100 @@ public class LoadFishData : MonoBehaviour
         return fishFiles;
     }
 
+
     public void SetSelectedFish(string fishName)
     {
         Debug.Log("Has selected fish: " + fishName);
         selectedFish = fishName;
-        int nbrBrains = brains.Count;
+
         if (!string.IsNullOrEmpty(selectedFish))
         {
             StartCoroutine(ShowInitialView(1));
+
             if (brains[0].totalActivityList.ContainsKey(selectedFish))
             {
                 Debug.Log("Seizure data for fish " + selectedFish + " already loaded");
                 return;
             }
-            // todo: Using async coroutine for better UX
+
             uiHandler.DisableActionButtons();
-            LoadSeizureDataSync(selectedFish, isBulkLoading: false);
-            statusMessage.text = $"Fish selected: {selectedFish}, Region selected: {selectedRegion}, now loading seizure file";
-            // uiHandler.EnableActionButton();
+
+            string fishFile = fishFileDict[fishName];
+
+            // Show progress bar
+            progressBar.SetActive(true);
+            progressBarFill.fillAmount = 0f;
+            progressBarText.text = "0%";
+
+            CSVLoader.LoadSeizureData(dataFolder, fishFile, fishName,
+                onComplete: (result) => OnSeizureDataLoaded(fishName, result, false),
+                onError: (error) =>
+                {
+                    statusMessage.text = error;
+                    progressBar.SetActive(false);
+                },
+                onProgress: (progress, message) =>
+                {
+                    progressBarFill.fillAmount = progress;
+                    progressBarText.text = $"{(int)(progress * 100)}%";
+                    statusMessage.text = message;
+                }
+            );
         }
     }
 
+
+    private void OnSeizureDataLoaded(string fishName, CSVLoader.SeizureDataResult result, bool isBulkLoading)
+    {
+        // Process the loaded seizure data
+        foreach (var neuronEntry in result.neuronActivityData)
+        {
+            int neuronIdx = neuronEntry.Key;
+            var activityData = neuronEntry.Value[fishName];
+
+            // Update all brains
+            foreach (BrainData brain in brains)
+            {
+                NeuronData neuron = brain.neurons.FirstOrDefault(n => n.neuronIdx == neuronIdx);
+                if (neuron != null)
+                {
+                    for (int i = 0; i < activityData.Count; i++)
+                    {
+                        neuron.AddActivity(fishName, activityData[i], i);
+                    }
+                }
+            }
+        }
+
+        // Update min/max values
+        foreach (BrainData brain in brains)
+        {
+            foreach (RegionData region in brain.regions.Values)
+            {
+                region.UpdateMinMax();
+            }
+            brain.UpdateMinMax();
+        }
+
+        // Hide progress bar
+        progressBar.SetActive(false);
+
+        // Handle UI based on loading type
+        if (!isBulkLoading)
+        {
+            uiHandler.EnableActionButtons();
+            statusMessage.text = $"Seizure data loaded for fish: {fishName}";
+
+            if (!string.IsNullOrEmpty(selectedRegion))
+            {
+                StartCoroutine(MakeSeizureLine(selectedRegion));
+            }
+        }
+        else
+        {
+            Debug.Log($"Seizure data loaded for fish: {fishName}");
+        }
+    }
 
 
     public void SetSelectedRegion(string regionName)
@@ -852,486 +1030,123 @@ private void BatchUpdateNeurons(int rowIdx, int[] binaryArray, int count,
 
 
 IEnumerator SwoopCameraDuringSeizure()
-
-
-
 {
-
-
-
     int swoopTimeDelay = 10;
 
-
-
     // Wait for seizure data to start
-
-
-
     while (!isSeizureDataRunning)
-
-
-
         yield return null;
-
-
-
-
-
-
 
     // Safety checks
-
-
-
     if (brains == null || brains.Count == 0 || cameraHandler == null || cameraHandler.mainCamera == null)
-
-
-
     {
-
-
-
         Debug.LogWarning("Cannot swoop camera: missing brains or camera.");
-
-
-
         yield break;
-
-
-
     }
-
-
-
-
-
-
 
     Vector3 brainCenter = brains[0].bounds.center;
-
-
-
     Vector3 p0 = cameraHandler.mainCamera.transform.position;
-
-
-
     Quaternion originalCameraRotation = cameraHandler.mainCamera.transform.rotation;
 
-
-
-
-
-
-
     // Desired distance from brain centre for final position
-
-
-
     float desiredDistance = 10f;
-
-
-
-
-
-
-
     // Compute target position on same hemisphere as original
-
-
-
     Vector3 fromCenterToCamera = (p0 - brainCenter);
 
-
-
     if (fromCenterToCamera.sqrMagnitude < 0.0001f)
-
-
-
         fromCenterToCamera = new Vector3(0, 0, -1); // fallback
 
-
-
-
-
-
-
     Vector3 direction = fromCenterToCamera.normalized;
-
-
-
     Vector3 p3 = brainCenter + direction * desiredDistance;
 
-
-
-
-
-
-
     // Build control points to create an arc above the midpoint
-
-
-
     Vector3 mid = (p0 + p3) * 0.5f;
-
-
-
     float arcHeight = Mathf.Max(Mathf.Min((p0 - p3).magnitude * 0.3f, 300f), 50f); // scale arc by distance
-
-
-
     Vector3 upOffset = Vector3.up * arcHeight;
-
-
-
-
-
-
-
     Vector3 c1 = Vector3.Lerp(p0, mid, 0.5f) + upOffset;
-
-
-
     Vector3 c2 = Vector3.Lerp(mid, p3, 0.5f) + upOffset;
 
-
-
-
-
-
-
     // Duration and safety
-
-
-
     float swoopDuration = Mathf.Max((endTimestamp - startTimestamp) * animationStepInterval, 0.5f);
-
-
-
     float elapsedTime = 0f;
 
-
-
-
-
-
-
     // Convert configured delay in timestamps to seconds and clamp to < swoopDuration
-
-
-
     float configuredDelay = Mathf.Max(0, swoopTimeDelay) * animationStepInterval;
-
-
-
     float delaySeconds = Mathf.Clamp(configuredDelay, 0f, swoopDuration * 0.9f);
 
-
-
-
-
-
-
     // Movement duration after the hold
-
-
-
     float moveDuration = Mathf.Max(swoopDuration - delaySeconds, 0.0001f);
 
-
-
-
-
-
-
     // smoothing parameters
-
-
-
     float positionSmoothSpeed = 5f;
-
-
-
     float rotationSmoothSpeed = 5f;
-
-
-
     Vector3 currentPos = cameraHandler.mainCamera.transform.position;
-
-
-
     Quaternion currentRot = cameraHandler.mainCamera.transform.rotation;
 
-
-
-
-
-
-
     // Cubic ease-in-out helper
-
-
-
     Func<float, float> EaseInOutCubic = (t) =>
-
-
-
     {
-
-
-
         return t < 0.5f ? 4f * t * t * t : 1f - Mathf.Pow(-2f * t + 2f, 3f) / 2f;
-
-
-
     };
-
-
-
-
-
-
-
     // Hold start pose once while delaying to avoid per-frame resets
-
-
-
     bool holdPoseSet = false;
 
-
-
-
-
-
-
     while (isSeizureDataRunning && elapsedTime < swoopDuration)
-
-
-
     {
-
-
-
         if (elapsedTime < delaySeconds)
-
-
-
         {
-
-
-
             if (!holdPoseSet)
-
-
-
             {
-
-
-
                 // ensure exact start pose while waiting
-
-
-
                 cameraHandler.mainCamera.transform.position = p0;
-
-
-
                 cameraHandler.mainCamera.transform.rotation = originalCameraRotation;
-
-
-
                 holdPoseSet = true;
-
-
-
                 currentPos = p0;
-
-
-
                 currentRot = originalCameraRotation;
-
-
-
             }
-
-
-
         }
-
-
-
         else
-
-
-
         {
-
-
-
             // map elapsedTime into movement phase [0..1]
-
-
-
             float moveTime = elapsedTime - delaySeconds;
-
-
-
             float rawT = Mathf.Clamp01(moveTime / moveDuration);
-
-
-
             float easedT = EaseInOutCubic(rawT);
 
-
-
-
-
-
-
             // Cubic Bezier interpolation (use easedT from movement phase)
-
-
-
             float u = 1f - easedT;
 
-
-
             Vector3 targetPos =
-
-
-
                 u * u * u * p0 +
-
-
-
                 3f * u * u * easedT * c1 +
-
-
-
                 3f * u * easedT * easedT * c2 +
-
-
-
                 easedT * easedT * easedT * p3;
 
-
-
-
-
-
-
             // Orientation: look toward the brain centre from current position
-
-
-
             Vector3 lookDir = (brainCenter - targetPos).normalized;
-
-
-
             Quaternion targetRot = currentRot;
 
-
-
             if (lookDir.sqrMagnitude > 0.0001f)
-
-
-
             {
-
-
-
                 targetRot = Quaternion.LookRotation(lookDir, Vector3.up);
-
-
-
             }
 
-
-
-
-
-
-
             float posLerp = 1f - Mathf.Exp(-positionSmoothSpeed * Time.deltaTime);
-
-
-
             float rotLerp = 1f - Mathf.Exp(-rotationSmoothSpeed * Time.deltaTime);
-
-
-
-
-
-
-
             currentPos = Vector3.Lerp(currentPos, targetPos, posLerp);
-
-
-
             currentRot = Quaternion.Slerp(currentRot,targetRot,rotLerp);
-
-
-
-
-
-
-
             cameraHandler.mainCamera.transform.position = currentPos;
-
-
-
             cameraHandler.mainCamera.transform.rotation = currentRot;
-
-
-
         }
-
-
-
-
-
-
-
         elapsedTime += Time.deltaTime;
-
-
-
         yield return null;
-
-
-
     }
-
-
-
-
-
-
 
     // Finalize exact pose
-
-
-
     if (cameraHandler?.mainCamera != null)
-
-
-
-
     {
-
-
-
         cameraHandler.mainCamera.transform.position = p3;
-
-
-
         cameraHandler.mainCamera.transform.rotation = Quaternion.LookRotation(brainCenter - p3, Vector3.up);
-
-
-
     }
-
-
-
 }
 
 public void BulkLoadAllFish()
@@ -1342,65 +1157,65 @@ public void BulkLoadAllFish()
     StartCoroutine(BulkLoadAllFishCoroutine());
 }
 
-private IEnumerator BulkLoadAllFishCoroutine()
-{
-    int totalFish = fishFileDict.Keys.Count;
-    int currentFishIndex = 0;
-
-    // Initialize bulk progress bar for loading phase
-    progressBar.SetActive(true);
-    progressBarFill.fillAmount = 0f;
-    progressBarText.text = "0%";
-
-    statusMessage.text = $"Starting bulk load for {totalFish} fish...";
-    selectedRegion = "Whole Brain"; // For bulk operations, we use whole brain
-
-    // Load all seizure data files
-    Debug.Log("=== BULK LOADING: Loading all seizure data files ===");
-    foreach (var fishName in fishFileDict.Keys)
+    // Update bulk loading to use new loader
+    private IEnumerator BulkLoadAllFishCoroutine()
     {
-        currentFishIndex++;
+        int totalFish = fishFileDict.Keys.Count;
+        int currentFishIndex = 0;
 
-        // Update bulk progress bar for loading phase
-        float loadingProgress = (float)currentFishIndex / totalFish;
-        progressBarFill.fillAmount = loadingProgress;
-        progressBarText.text = $"Loading: {(int)(loadingProgress * 100)}%";
+        progressBar.SetActive(true);
+        progressBarFill.fillAmount = 0f;
+        progressBarText.text = "0%";
 
-        statusMessage.text = $"Loading seizure data for fish {fishName}... ({currentFishIndex}/{totalFish})";
-        Debug.Log($"Bulk loading: Processing fish {fishName} ({currentFishIndex}/{totalFish})");
+        statusMessage.text = $"Starting bulk load for {totalFish} fish...";
+        selectedRegion = "Whole Brain";
 
-        // Check if seizure data is already loaded for this fish
-        if (!brains[0].totalActivityList.ContainsKey(fishName))
+        foreach (var fishName in fishFileDict.Keys)
         {
-            // Use the unified function for bulk loading
-            LoadSeizureDataSync(fishName, isBulkLoading: true);
+            currentFishIndex++;
 
-            // Brief pause to allow any pending operations
+            if (!brains[0].totalActivityList.ContainsKey(fishName))
+            {
+                string fishFile = fishFileDict[fishName];
+                bool loadComplete = false;
+
+                CSVLoader.LoadSeizureData(dataFolder, fishFile, fishName,
+                    onComplete: (result) =>
+                    {
+                        OnSeizureDataLoaded(fishName, result, true);
+                        loadComplete = true;
+                    },
+                    onError: (error) =>
+                    {
+                        Debug.LogError(error);
+                        loadComplete = true;
+                    },
+                    onProgress: (progress, message) =>
+                    {
+                        float overallProgress = (currentFishIndex - 1 + progress) / totalFish;
+                        progressBarFill.fillAmount = overallProgress;
+                        progressBarText.text = $"Loading: {(int)(overallProgress * 100)}%";
+                        statusMessage.text = $"Loading {fishName}: {message}";
+                    }
+                );
+
+                // Wait for completion
+                while (!loadComplete)
+                {
+                    yield return null;
+                }
+            }
+
             yield return new WaitForSeconds(0.1f);
         }
 
-        // Check if data was successfully loaded
-        if (!brains[0].totalActivityList.ContainsKey(fishName))
-        {
-            Debug.LogError($"Failed to load seizure data for fish {fishName}. Skipping this fish...");
-            continue;
-        }
-
-        Debug.Log($"Successfully loaded seizure data for fish {fishName}");
+        progressBar.SetActive(false);
+        uiHandler.bulkExportButton.interactable = true;
+        statusMessage.text = $"Bulk loading completed! Loaded data for {totalFish} fish.";
     }
 
-    // Hide progress bar after loading phase
-    progressBar.SetActive(false);
-    yield return new WaitForSeconds(0.5f);
 
-    uiHandler.bulkExportButton.interactable = true;
-    
-    // Final status update
-    statusMessage.text = $"Bulk loading completed! Loaded data for {totalFish} fish.";
-    Debug.Log("Bulk loading completed for all fish");
-}
-
-public void BulkExportAllFrames()
+    public void BulkExportAllFrames()
 {
     Debug.Log("Starting bulk export for all fish");
     StartCoroutine(BulkExportAllFramesCoroutine());
@@ -2191,12 +2006,13 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
     }
 
 
-
-
-    // Utility to clear existing neurons and release buffers
-
+    // Add cleanup method
     void OnDestroy()
     {
+        // Return all neurons to pool
+        NeuronObjectPool.Instance.ReturnAllNeurons();
+
+        // Release buffers
         if (binaryDataBuffer != null)
         {
             binaryDataBuffer.Release();

@@ -258,6 +258,7 @@ public class LoadFishData : MonoBehaviour
             },
             onProgress: (progress, message) => statusMessage.text = message
         );
+
     }
 
 
@@ -265,6 +266,9 @@ public class LoadFishData : MonoBehaviour
     {
         // Create brain from loaded data
         BrainData thisBrain = CreateBrainFromPositionData(result, "Brain0");
+
+        Debug.Log("Added " + thisBrain.neurons.Count + " neurons to new brain gameObject: " + thisBrain.name);
+
 
         // Get fish files using static method
         fishFileDict = CSVLoader.GetFishNamesAndFiles(dataFolder);
@@ -1365,6 +1369,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         {
         uiHandler.startTimeText.text = frame.ToString();
         UpdateNeuronStates(frame, selectedFish, selectedRegion);
+        uiHandler.startTimeText.text = frame.ToString();
 
         if (timelineMarker != null && timelinePoints.Count > frame)
         {
@@ -1583,6 +1588,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         {
             currentSignalTimestamp = col;
             UpdateNeuronStates(col, selectedFish, selectedRegion);
+            uiHandler.startTimeText.text = col.ToString();
 
             Debug.Log($"Frame {col}: Active neurons: {activeNeurons.Count}");
             Debug.Log($"Frame {col}: Brain rotation: {brains[0].transform.rotation}");
@@ -1617,7 +1623,7 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         isSeizureDataRunning = false;
 
         // Cleanup and UI restoration
-        ResetEndMarker(startTimestamp);
+        ResetEndMarker(endTimestamp);
         FinishSeizureAnimation();
     }
 
@@ -1878,8 +1884,6 @@ private IEnumerator ExportFramesCoroutine(int startFrame, int endFrame, string e
         }
 
     reader.Close();
-    Debug.Log("Added " + defaultBrain.neurons.Count + " neurons to new brain gameObject: " + defaultBrain.name);
-
     return defaultBrain;
     } // end of LoadAllNeuronData
 

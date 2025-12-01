@@ -93,6 +93,7 @@ public class CameraHandler : MonoBehaviour
             backgroundCamera.enabled = false;
         }
 
+        float viewwidth = viewportWidth / nbrBrains;
         for (int i = 0; i < brainCameras.Count; i++)
         {
             Camera brainCamera = brainCameras[i];
@@ -105,11 +106,11 @@ public class CameraHandler : MonoBehaviour
 
             // Enable and position each brain's camera
             //brainCamera.enabled = true;
-            brainCamera.rect = new Rect(i * viewportWidth, 0f, viewportWidth, 0.8f);
+            brainCamera.rect = new Rect(i * viewwidth, 0f, viewwidth, 0.8f);
             brainCamera.clearFlags = CameraClearFlags.Skybox;
             brainCamera.depth = i == 0 ? 0 : (i + 1); // Main camera depth 0, others start at 2
 
-            Debug.Log($"Camera {i} '{brainCamera.name}' viewport: x={i * viewportWidth:F2}, width={viewportWidth:F2}");
+            Debug.Log($"Camera {i} '{brainCamera.name}' viewport: x={i * viewwidth:F2}, width={viewwidth:F2}");
         }
 
         // Disable any unused feature set cameras (only those not in the active list)
@@ -134,7 +135,7 @@ public class CameraHandler : MonoBehaviour
         // Use the extent to set the distance
         float minDistance = 100f; // Set based on your scene scale
         float maxDistance = 1500f;
-        float distance = Mathf.Clamp(extent * 1.75f, minDistance, maxDistance);
+        float distance = Mathf.Clamp(extent * 1.5f, minDistance, maxDistance);
 
         // Main camera
         // todo move main camera slowly to new position

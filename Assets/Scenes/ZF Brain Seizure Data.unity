@@ -2367,7 +2367,7 @@ MonoBehaviour:
   useObjectPooling: 1
   dataFolder: Assets/Data
   postionsFile: fish_ROI_GT.csv
-  useFeatureColours: 0
+  useFeatureColours: 1
   selectedFish: 
   selectedRegion: 
   wholeBrain: Brain0
@@ -2391,9 +2391,9 @@ MonoBehaviour:
   uiHandler: {fileID: 582102894}
   statusMessage: {fileID: 816496209}
   seizureDetails: {fileID: 0}
-  progressBar: {fileID: 0}
-  progressBarFill: {fileID: 0}
-  progressBarText: {fileID: 0}
+  progressBar: {fileID: 952009165}
+  progressBarFill: {fileID: 1850403662}
+  progressBarText: {fileID: 1065394851}
   timelineMarkerPrefab: {fileID: 435877049279053570, guid: b35faeba429a9944c8b0d131b35b2d9f, type: 3}
 --- !u!114 &582102893
 MonoBehaviour:

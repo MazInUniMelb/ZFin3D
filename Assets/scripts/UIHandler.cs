@@ -126,8 +126,8 @@ public class UIHandler : MonoBehaviour
     {
         showSeizureButton.gameObject.SetActive(true);
         makeFramesButton.gameObject.SetActive(true);
-        bulkExportButton.gameObject.SetActive(true);
-        regionDropdown.gameObject.SetActive(true);
+        //bulkExportButton.gameObject.SetActive(true);
+        //regionDropdown.gameObject.SetActive(true);
     }
 
 
